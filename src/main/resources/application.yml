@@ -1,0 +1,50 @@
+# ==========================================
+# 村级自来水管理系统 — 配置文件
+# ==========================================
+
+server:
+  port: 8080                          # 程序启动后访问地址：http://localhost:8080
+  address: 0.0.0.0                    # 允许局域网内其他电脑访问
+
+spring:
+  application:
+    name: water-management            # 应用名称
+
+  # ---- 数据库配置 (SQLite) ----
+  datasource:
+    url: jdbc:sqlite:./data/water_meter.db   # 数据库文件存放在 data/ 文件夹下
+    driver-class-name: org.sqlite.JDBC       # SQLite 驱动类
+
+  # ---- JPA 配置 ----
+  jpa:
+    # 告诉 JPA 我们在用 SQLite 数据库，需要对应的"方言"来翻译 SQL
+    database-platform: org.hibernate.community.dialect.SQLiteDialect
+    hibernate:
+      ddl-auto: update               # 自动建表：实体类变了会自动更新表结构，但不会删数据
+    show-sql: false                   # 生产环境关闭 SQL 日志；调试时可改为 true
+    open-in-view: false               # 关闭 OSIV，避免性能问题
+
+  # ---- 前端静态资源 ----
+  web:
+    resources:
+      static-locations: classpath:/static/
+
+# ==========================================
+# SpringDoc / OpenAPI 3 API 文档配置
+# 访问地址：http://localhost:8080/swagger-ui.html
+# ==========================================
+springdoc:
+  api-docs:
+    path: /api-docs                   # OpenAPI JSON 路径
+  swagger-ui:
+    path: /swagger-ui.html            # Swagger UI 页面路径
+    operations-sorter: alpha          # 接口按字母排序
+    tags-sorter: alpha                # 分组按字母排序
+
+# ==========================================
+# 业务配置
+# ==========================================
+water:
+  price: 1.8                           # 水价（元/吨），可在系统设置页面修改
+  abnormal:
+    threshold: 100                     # 异常检测阈值（吨），月用量超过此值标记异常

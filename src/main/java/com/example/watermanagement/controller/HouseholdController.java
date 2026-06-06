@@ -1,0 +1,69 @@
+package com.example.watermanagement.controller;
+
+import com.example.watermanagement.dto.ApiResponse;
+import com.example.watermanagement.dto.HouseholdRequest;
+import com.example.watermanagement.entity.Household;
+import com.example.watermanagement.service.HouseholdService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+/**
+ * 村民管理 Controller
+ * <p>
+ * 提供村民的增删改查，支持按村名多选筛选、水表编号模糊查询、分页。
+ */
+@Tag(name = "村民管理", description = "村民/水表信息的增删改查")
+@RestController
+@RequestMapping("/api/households")
+@RequiredArgsConstructor
+public class HouseholdController {
+
+    private final HouseholdService householdService;
+
+    @Operation(summary = "分页获取村民列表", description = "支持按村名多选筛选、水表编号模糊查询")
+    @GetMapping("/list")
+    public ApiResponse<Page<Household>> list(
+            @Parameter(description = "村名列表（多选）") @RequestParam(required = false) List<String> villageNames,
+            @Parameter(description = "水表编号（模糊搜索）") @RequestParam(required = false) String waterMeterId,
+            @Parameter(description = "页码（从0开始）") @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "每页条数") @RequestParam(defaultValue = "20") int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        return ApiResponse.ok(householdService.list(villageNames, waterMeterId, pageable));
+    }
+
+    @Operation(summary = "根据ID查询村民")
+    @GetMapping("/{id}")
+    public ApiResponse<Household> getById(@Parameter(description = "村民ID") @PathVariable Long id) {
+        return ApiResponse.ok(householdService.getById(id));
+    }
+
+    @Operation(summary = "新增村民", description = "校验水表编号唯一性，同时自动创建材料费账单")
+    @PostMapping("/add")
+    public ApiResponse<Household> add(@Valid @RequestBody HouseholdRequest request) {
+        return ApiResponse.ok("新增成功", householdService.add(request));
+    }
+
+    @Operation(summary = "更新村民信息", description = "支持换绑水表编号，同步更新材料费账单")
+    @PutMapping("/update/{id}")
+    public ApiResponse<Household> update(
+            @Parameter(description = "村民ID") @PathVariable Long id,
+            @Valid @RequestBody HouseholdRequest request) {
+        return ApiResponse.ok("更新成功", householdService.update(id, request));
+    }
+
+    @Operation(summary = "删除村民（软删除）", description = "将 is_active 置为 0，数据不物理删除")
+    @DeleteMapping("/delete/{id}")
+    public ApiResponse<Void> delete(@Parameter(description = "村民ID") @PathVariable Long id) {
+        householdService.delete(id);
+        return ApiResponse.ok("删除成功", null);
+    }
+}
