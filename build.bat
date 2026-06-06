@@ -5,6 +5,10 @@ echo   Building Water Management System
 echo ============================================
 echo.
 
+REM ---- Ensure WiX is available (needed for EXE) ----
+set "WIX=C:\Program Files (x86)\WiX Toolset v3.14\bin"
+if exist "%WIX%\candle.exe" set "PATH=%WIX%;%PATH%"
+
 REM ---- Step 1: Frontend ----
 echo [1/4] Building frontend...
 cd /d "%~dp0frontend"
@@ -33,21 +37,36 @@ if exist "%~dp0installer" rmdir /s /q "%~dp0installer"
 
 for %%f in ("%~dp0target\*.jar") do set "JAR_NAME=%%~nxf"
 
-jpackage --type app-image --name "VillageWaterManagement" --app-version 1.0.0 --input "%~dp0target" --main-jar "%JAR_NAME%" --main-class org.springframework.boot.loader.JarLauncher --runtime-image "%~dp0target\custom-jre" --dest "%~dp0installer"
-if %ERRORLEVEL% NEQ 0 goto :fail
+echo   Trying single EXE installer...
+jpackage --type exe --name "VillageWaterManagement" --app-version 1.0.0 --input "%~dp0target" --main-jar "%JAR_NAME%" --main-class org.springframework.boot.loader.JarLauncher --runtime-image "%~dp0target\custom-jre" --win-console --win-shortcut --win-menu --win-dir-chooser --vendor "Village Committee" --description "Water Management System" --dest "%~dp0installer"
 
-echo.
-echo ============================================
-echo   BUILD SUCCESS!
-echo.
-echo   Run this to start:
-echo     installer\VillageWaterManagement\VillageWaterManagement.exe
-echo.
-echo   Or zip the VillageWaterManagement folder
-echo   and send it to users.
-echo ============================================
-echo.
-goto :end
+if %ERRORLEVEL% EQU 0 (
+    echo.
+    echo ============================================
+    echo   BUILD SUCCESS - Single EXE installer!
+    echo.
+    for %%g in ("%~dp0installer\*.exe") do echo   %%g
+    echo.
+    echo   Just double-click it to install.
+    echo ============================================
+    goto :end
+)
+
+echo   EXE failed, trying portable version...
+jpackage --type app-image --name "VillageWaterManagement" --app-version 1.0.0 --input "%~dp0target" --main-jar "%JAR_NAME%" --main-class org.springframework.boot.loader.JarLauncher --runtime-image "%~dp0target\custom-jre" --dest "%~dp0installer"
+
+if %ERRORLEVEL% EQU 0 (
+    echo.
+    echo ============================================
+    echo   BUILD SUCCESS - Portable version!
+    echo.
+    echo     installer\VillageWaterManagement\
+    echo     Double-click VillageWaterManagement.exe
+    echo ============================================
+    goto :end
+)
+
+goto :fail
 
 :fail
 echo.
