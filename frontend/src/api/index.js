@@ -10,6 +10,10 @@ const api = axios.create({
 // 响应拦截器：统一处理错误
 api.interceptors.response.use(
   response => {
+    // 对于文件下载（blob），直接返回原始数据，不做 JSON 解包
+    if (response.config.responseType === 'blob') {
+      return response.data
+    }
     const { code, message, data } = response.data
     if (code === 200) {
       return data           // 成功时直接返回 data，简化调用方代码

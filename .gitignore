@@ -43,6 +43,9 @@ frontend/dist/
 ### Logs ###
 logs/
 
+### Installer (large binary) ###
+installer/
+
 ### OS ###
 .DS_Store
 Thumbs.db
