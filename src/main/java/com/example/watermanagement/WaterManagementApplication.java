@@ -9,8 +9,10 @@ import java.io.File;
 public class WaterManagementApplication {
 
     public static void main(String[] args) {
-        // 确保 data 目录存在，SQLite JDBC 不会自动创建父文件夹
-        File dataDir = new File("./data");
+        // 数据库存储在用户目录下，确保 data 文件夹存在
+        // 对应 application.yml: ${user.home}/.water-management/data/water_meter.db
+        String userHome = System.getProperty("user.home");
+        File dataDir = new File(userHome, ".water-management/data");
         if (!dataDir.exists()) {
             dataDir.mkdirs();
         }

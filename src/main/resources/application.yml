@@ -12,7 +12,8 @@ spring:
 
   # ---- 数据库配置 (SQLite) ----
   datasource:
-    url: jdbc:sqlite:./data/water_meter.db   # 数据库文件存放在 data/ 文件夹下
+    # 使用用户目录存储数据库，避免安装到 Program Files 时无写入权限
+    url: jdbc:sqlite:${user.home}/.water-management/data/water_meter.db
     driver-class-name: org.sqlite.JDBC       # SQLite 驱动类
 
   # ---- JPA 配置 ----
