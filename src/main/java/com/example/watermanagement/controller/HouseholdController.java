@@ -7,14 +7,18 @@ import com.example.watermanagement.service.HouseholdService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 村民管理 Controller
@@ -65,5 +69,24 @@ public class HouseholdController {
     public ApiResponse<Void> delete(@Parameter(description = "村民ID") @PathVariable Long id) {
         householdService.delete(id);
         return ApiResponse.ok("删除成功", null);
+    }
+
+    @Operation(summary = "导出村民信息到Excel", description = "按筛选条件导出")
+    @GetMapping("/export")
+    public void export(@Parameter(description = "村名列表") @RequestParam(required = false) List<String> villageNames,
+                       @Parameter(description = "水表编号") @RequestParam(required = false) String waterMeterId,
+                       HttpServletResponse response) throws IOException {
+        householdService.exportToExcel(villageNames, waterMeterId, response);
+    }
+
+    @Operation(summary = "批量导入村民", description = "上传Excel文件，全量唯一性校验后批量写入")
+    @PostMapping("/import")
+    public ApiResponse<Map<String, Object>> importExcel(
+            @Parameter(description = "Excel文件") @RequestParam("file") MultipartFile file) throws IOException {
+        Map<String, Object> result = householdService.importFromExcel(file.getInputStream());
+        if (result.containsKey("conflicts")) {
+            return ApiResponse.fail(result.get("message").toString());
+        }
+        return ApiResponse.ok(result.get("message").toString(), result);
     }
 }

@@ -46,4 +46,16 @@ public interface HouseholdService {
      * 查询所有活跃用户（用于抄表模板导出等）
      */
     List<Household> findAllActive();
+
+    /**
+     * 导出村民数据到 Excel
+     */
+    void exportToExcel(List<String> villageNames, String waterMeterId,
+                       jakarta.servlet.http.HttpServletResponse response) throws java.io.IOException;
+
+    /**
+     * 从 Excel 批量导入村民
+     * @return 导入结果 {total, message} 或 {conflicts, message}
+     */
+    java.util.Map<String, Object> importFromExcel(java.io.InputStream inputStream);
 }
