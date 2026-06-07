@@ -34,7 +34,11 @@ export const householdApi = {
   getById: (id) => api.get(`/households/${id}`),
   add: (data) => api.post('/households/add', data),
   update: (id, data) => api.put(`/households/update/${id}`, data),
-  delete: (id) => api.delete(`/households/delete/${id}`)
+  delete: (id) => api.delete(`/households/delete/${id}`),
+  exportExcel: (params) => api.get('/households/export', { params, responseType: 'blob' }),
+  importExcel: (formData) => api.post('/households/import', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
 }
 
 // ==================== 抄表管理 ====================

@@ -19,6 +19,10 @@
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
         <h3 style="margin:0">{{ form.id ? '编辑村民' : '新增村民' }}</h3>
         <el-button type="primary" @click="resetForm">新增</el-button>
+        <el-button type="success" @click="exportExcel">📥 导出Excel</el-button>
+        <el-upload :before-upload="importExcel" :show-file-list="false" accept=".xlsx" style="display:inline-block;margin-left:8px">
+          <el-button type="warning">📤 导入Excel</el-button>
+        </el-upload>
       </div>
       <el-form :model="form" label-width="100px" :rules="rules" ref="formRef">
         <el-form-item label="户主姓名" prop="householdName">
@@ -41,6 +45,26 @@
           <el-button v-if="form.id" type="danger" @click="del" :loading="deleting">删除（软删除）</el-button>
         </el-form-item>
       </el-form>
+
+      <!-- 缴费历史 -->
+      <div v-if="form.id" style="margin-top:20px">
+        <h4>缴费历史</h4>
+        <el-table :data="paymentHistory" stripe size="small" max-height="300">
+          <el-table-column prop="paidDate" label="日期" width="100" />
+          <el-table-column prop="billType" label="类型" width="80">
+            <template #default="{ row }">
+              <el-tag :type="row.billType === 'water' ? 'primary' : 'warning'" size="small">
+                {{ row.billType === 'water' ? '水费' : '材料费' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="amount" label="金额" width="100" />
+          <el-table-column prop="paymentMethod" label="方式" width="80" />
+          <el-table-column prop="operator" label="操作员" width="80" />
+          <el-table-column prop="note" label="备注" min-width="120" show-overflow-tooltip />
+        </el-table>
+        <el-empty v-if="!paymentHistory.length" description="暂无缴费记录" :image-size="40" />
+      </div>
     </div>
   </div>
 </template>
@@ -48,7 +72,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { householdApi } from '@/api'
+import { householdApi, paymentApi } from '@/api'
 
 const villages = ref([])
 const selectedVillages = ref([])
@@ -59,6 +83,7 @@ const form = reactive({
 const formRef = ref(null)
 const saving = ref(false)
 const deleting = ref(false)
+const paymentHistory = ref([])
 const rules = {
   householdName: [{ required: true, message: '请输入户主姓名', trigger: 'blur' }],
   villageName: [{ required: true, message: '请输入村名', trigger: 'blur' }],
@@ -94,12 +119,14 @@ function onNodeClick(node) {
       waterMeterId: node.household.waterMeterId,
       materialFeeTotal: node.household.materialFeeTotal
     })
+    loadPaymentHistory()
   }
 }
 
 function resetForm() {
   formRef.value?.resetFields()
   Object.assign(form, { id: null, householdName: '', phone: '', villageName: '', waterMeterId: '', materialFeeTotal: 1500.00 })
+  paymentHistory.value = []
 }
 
 async function save() {
@@ -128,6 +155,37 @@ async function del() {
     resetForm()
     loadTree()
   } finally { deleting.value = false }
+}
+
+async function loadPaymentHistory() {
+  if (!form.id) { paymentHistory.value = []; return }
+  try {
+    paymentHistory.value = await paymentApi.getHistory(form.waterMeterId) || []
+  } catch { paymentHistory.value = [] }
+}
+
+async function exportExcel() {
+  const params = {}
+  if (selectedVillages.value.length) params.villageNames = selectedVillages.value.join(',')
+  const blob = await householdApi.exportExcel(params)
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = '村民信息.xlsx'; a.click()
+  URL.revokeObjectURL(url)
+  ElMessage.success('导出成功')
+}
+
+async function importExcel(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  try {
+    const result = await householdApi.importExcel(formData)
+    ElMessage.success(result?.message || '导入成功')
+    loadTree()
+  } catch (e) {
+    ElMessage.error(e.message || '导入失败，请检查Excel格式')
+  }
+  return false
 }
 
 onMounted(loadTree)
