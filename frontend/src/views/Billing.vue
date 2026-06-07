@@ -47,6 +47,11 @@
         <span v-if="payAmount > 0" style="color:#67C23A">
           <strong>找零：</strong>¥{{ Math.max(0, payAmount - totalDue).toFixed(2) }}
         </span>
+        <el-select v-model="payMethod" style="width:100px">
+          <el-option label="现金" value="现金" />
+          <el-option label="微信" value="微信" />
+          <el-option label="支付宝" value="支付宝" />
+        </el-select>
         <el-button type="primary" size="large" @click="doPay" :loading="paying"
           :disabled="!selectedBills.length || payAmount <= 0">💳 确认支付</el-button>
       </div>
@@ -67,6 +72,7 @@ const billType = ref('water')
 const pendingBills = ref([])
 const selectedBills = ref([])
 const payAmount = ref(0)
+const payMethod = ref('现金')
 const paying = ref(false)
 const billTable = ref(null)
 
@@ -108,7 +114,7 @@ async function doPay() {
       billIds: selectedBills.value.map(b => b.id),
       amount: payAmount.value,
       paidDate: new Date().toISOString().slice(0, 10),
-      paymentMethod: '现金',
+      paymentMethod: payMethod.value,
       operator: '管理员'
     })
     ElMessage.success('缴费成功')

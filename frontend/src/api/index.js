@@ -50,7 +50,8 @@ export const readingApi = {
     params: { year, month }
   }),
   singleSave: (params) => api.post('/readings/single', null, { params }),
-  getByMonth: (params) => api.get('/readings/by-month', { params })
+  getByMonth: (params) => api.get('/readings/by-month', { params }),
+  getAbnormal: (params) => api.get('/readings/abnormal', { params })
 }
 
 // ==================== 收费管理 ====================
@@ -66,6 +67,7 @@ export const paymentApi = {
 
 // ==================== 报表中心 ====================
 export const reportApi = {
+  getVillageCollectionRates: (params) => api.get('/reports/village-collection-rate', { params }),
   getWaterBillReport: (params) => api.get('/reports/water-bill', { params }),
   exportWaterBillReport: (params) => api.get('/reports/water-bill/export', {
     params,
