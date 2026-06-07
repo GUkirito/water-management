@@ -1,6 +1,7 @@
 package com.example.watermanagement.service.impl;
 
 import com.example.watermanagement.dto.MaterialSummaryRow;
+import com.example.watermanagement.dto.VillageCollectionRateRow;
 import com.example.watermanagement.dto.WaterBillReportRow;
 import com.example.watermanagement.entity.Household;
 import com.example.watermanagement.entity.MaterialBill;
@@ -18,9 +19,8 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.math.RoundingMode;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -115,6 +115,43 @@ public class ReportServiceImpl implements ReportService {
         String filename = "材料费统计表";
         ExcelUtil.export(response, filename, MaterialSummaryRow.class, data);
         log.info("导出材料费统计表: {}条", data.size());
+    }
+
+    // ==================== 各村收缴率 ====================
+
+    @Override
+    public List<VillageCollectionRateRow> getVillageCollectionRates(int year, int month) {
+        List<WaterBill> bills = waterBillRepository.findByBillYearAndBillMonth(year, month);
+
+        List<Household> households = householdRepository.findByIsActiveTrue();
+        Map<String, String> meterToVillage = households.stream()
+                .collect(Collectors.toMap(Household::getWaterMeterId, Household::getVillageName, (a, b) -> a));
+
+        // 按村分组统计 [应收总额, 实收总额]
+        Map<String, BigDecimal[]> villageStats = new LinkedHashMap<>();
+        for (WaterBill bill : bills) {
+            String village = meterToVillage.getOrDefault(bill.getWaterMeterId(), "未知");
+            villageStats.computeIfAbsent(village, k -> new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO});
+            BigDecimal[] stats = villageStats.get(village);
+            stats[0] = stats[0].add(bill.getWaterCharge() != null ? bill.getWaterCharge() : BigDecimal.ZERO);
+            stats[1] = stats[1].add(bill.getActualWaterPaid() != null ? bill.getActualWaterPaid() : BigDecimal.ZERO);
+        }
+
+        return villageStats.entrySet().stream()
+                .map(e -> {
+                    BigDecimal[] s = e.getValue();
+                    double rate = s[0].compareTo(BigDecimal.ZERO) > 0
+                            ? s[1].multiply(new BigDecimal("100")).divide(s[0], 1, RoundingMode.HALF_UP).doubleValue()
+                            : 100.0;
+                    return VillageCollectionRateRow.builder()
+                            .villageName(e.getKey())
+                            .totalCharge(s[0])
+                            .totalPaid(s[1])
+                            .collectionRate(rate)
+                            .build();
+                })
+                .sorted(Comparator.comparingDouble(VillageCollectionRateRow::getCollectionRate))
+                .collect(Collectors.toList());
     }
 
     // ==================== 私有方法 ====================

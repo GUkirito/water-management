@@ -64,4 +64,12 @@ public class ReportController {
             HttpServletResponse response) throws IOException {
         reportService.exportMaterialSummary(villageNames, response);
     }
+
+    @Operation(summary = "各村收缴率排行榜", description = "按收缴率升序排列，差的排前面")
+    @GetMapping("/village-collection-rate")
+    public ApiResponse<List<com.example.watermanagement.dto.VillageCollectionRateRow>> getVillageCollectionRates(
+            @Parameter(description = "年份") @RequestParam int year,
+            @Parameter(description = "月份") @RequestParam int month) {
+        return ApiResponse.ok(reportService.getVillageCollectionRates(year, month));
+    }
 }
