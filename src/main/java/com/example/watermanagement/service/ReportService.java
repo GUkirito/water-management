@@ -1,7 +1,6 @@
 package com.example.watermanagement.service;
 
 import com.example.watermanagement.dto.MaterialSummaryRow;
-import com.example.watermanagement.dto.VillageCollectionRateRow;
 import com.example.watermanagement.dto.WaterBillReportRow;
 import jakarta.servlet.http.HttpServletResponse;
 
@@ -44,9 +43,4 @@ public interface ReportService {
      * 查询材料费统计数据（供前端展示）
      */
     List<MaterialSummaryRow> getMaterialSummaryData(List<String> villageNames);
-
-    /**
-     * 各村收缴率排行（按收缴率升序，差的排前面）
-     */
-    List<VillageCollectionRateRow> getVillageCollectionRates(int year, int month);
 }

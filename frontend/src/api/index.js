@@ -67,7 +67,6 @@ export const paymentApi = {
 
 // ==================== 报表中心 ====================
 export const reportApi = {
-  getVillageCollectionRates: (params) => api.get('/reports/village-collection-rate', { params }),
   getWaterBillReport: (params) => api.get('/reports/water-bill', { params }),
   exportWaterBillReport: (params) => api.get('/reports/water-bill/export', {
     params,

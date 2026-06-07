@@ -36,46 +36,18 @@
       </el-col>
     </el-row>
 
-    <el-row :gutter="20" style="margin-top:20px">
-      <!-- 各村收缴率排行 -->
-      <el-col :span="14">
-        <el-card header="各村收缴率排行" shadow="hover">
-          <el-table :data="villageRates" stripe size="small" max-height="350">
-            <el-table-column prop="villageName" label="村名" width="100" />
-            <el-table-column prop="totalCharge" label="应收" width="100" />
-            <el-table-column prop="totalPaid" label="实收" width="100" />
-            <el-table-column label="收缴率" min-width="160">
-              <template #default="{ row }">
-                <div style="display:flex;align-items:center;gap:8px">
-                  <el-progress
-                    :percentage="row.collectionRate"
-                    :color="row.collectionRate >= 80 ? '#67C23A' : row.collectionRate >= 50 ? '#E6A23C' : '#F56C6C'"
-                    :stroke-width="16"
-                    style="flex:1"
-                  />
-                  <span style="font-size:12px;width:45px">{{ row.collectionRate }}%</span>
-                </div>
-              </template>
-            </el-table-column>
-          </el-table>
-        </el-card>
-      </el-col>
-
-      <!-- 异常抄表提醒 -->
-      <el-col :span="10">
-        <el-card header="异常抄表提醒" shadow="hover">
-          <el-table :data="abnormalReadings" stripe size="small" max-height="350">
-            <el-table-column prop="readingDate" label="日期" width="100">
-              <template #default="{ row }">{{ row.readingDate?.slice(0, 10) }}</template>
-            </el-table-column>
-            <el-table-column prop="householdName" label="户名" width="80" />
-            <el-table-column prop="villageName" label="村名" width="80" />
-            <el-table-column prop="abnormalReason" label="异常原因" min-width="120" show-overflow-tooltip />
-          </el-table>
-          <el-empty v-if="!abnormalReadings.length" description="暂无异常" :image-size="60" />
-        </el-card>
-      </el-col>
-    </el-row>
+    <!-- 异常抄表提醒 -->
+    <el-card style="margin-top:20px" header="异常抄表提醒" shadow="hover">
+      <el-table :data="abnormalReadings" stripe size="small" max-height="350">
+        <el-table-column prop="readingDate" label="日期" width="120">
+          <template #default="{ row }">{{ row.readingDate?.slice(0, 10) }}</template>
+        </el-table-column>
+        <el-table-column prop="householdName" label="户名" width="100" />
+        <el-table-column prop="villageName" label="村名" width="100" />
+        <el-table-column prop="abnormalReason" label="异常原因" min-width="200" show-overflow-tooltip />
+      </el-table>
+      <el-empty v-if="!abnormalReadings.length" description="暂无异常" :image-size="60" />
+    </el-card>
   </div>
 </template>
 
@@ -89,7 +61,6 @@ const stats = reactive({
   monthlyPaid: '0.00',
   collectionRate: '0.0'
 })
-const villageRates = ref([])
 const abnormalReadings = ref([])
 
 onMounted(async () => {
@@ -108,12 +79,6 @@ onMounted(async () => {
       stats.monthlyPaid = paid.toFixed(2)
       stats.collectionRate = charge > 0 ? ((paid / charge) * 100).toFixed(1) : '100.0'
     }
-  } catch { /* 忽略 */ }
-
-  // 各村收缴率
-  try {
-    const rates = await reportApi.getVillageCollectionRates({ year: now.getFullYear(), month: now.getMonth() + 1 })
-    villageRates.value = rates || []
   } catch { /* 忽略 */ }
 
   // 异常抄表
