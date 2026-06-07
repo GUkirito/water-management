@@ -18,6 +18,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.persistence.EntityManager;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
@@ -41,6 +42,7 @@ public class ReadingServiceImpl implements ReadingService {
     private final HouseholdRepository householdRepository;
     private final ReadingRepository readingRepository;
     private final WaterBillRepository waterBillRepository;
+    private final EntityManager entityManager;
 
     /** 水价：元/吨，默认 1.8 */
     @Value("${water.price:1.8}")
@@ -308,5 +310,27 @@ public class ReadingServiceImpl implements ReadingService {
             return "用量突增（" + usage + " 吨 > 阈值 " + abnormalThreshold + " 吨）";
         }
         return null;
+    }
+
+    // ==================== 异常查询 ====================
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> getAbnormalReadings(int limit) {
+        String jpql = """
+            SELECT new map(
+                r.readingDate as readingDate,
+                r.abnormalReason as abnormalReason,
+                h.householdName as householdName,
+                h.villageName as villageName
+            )
+            FROM Reading r
+            JOIN Household h ON r.waterMeterId = h.waterMeterId
+            WHERE r.isAbnormal = true
+            ORDER BY r.readingDate DESC
+            """;
+        return (List<Map<String, Object>>) entityManager.createQuery(jpql)
+                .setMaxResults(limit)
+                .getResultList();
     }
 }

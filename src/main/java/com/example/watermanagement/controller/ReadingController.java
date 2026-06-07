@@ -81,4 +81,11 @@ public class ReadingController {
             @Parameter(description = "村名列表（多选）") @RequestParam(required = false) List<String> villageNames) {
         return ApiResponse.ok(readingService.getByMonth(year, month, villageNames));
     }
+
+    @Operation(summary = "查询异常抄表记录", description = "返回最近N条异常抄表，含户名村名，用于仪表盘提醒")
+    @GetMapping("/abnormal")
+    public ApiResponse<List<java.util.Map<String, Object>>> getAbnormal(
+            @Parameter(description = "返回条数") @RequestParam(defaultValue = "20") int limit) {
+        return ApiResponse.ok(readingService.getAbnormalReadings(limit));
+    }
 }

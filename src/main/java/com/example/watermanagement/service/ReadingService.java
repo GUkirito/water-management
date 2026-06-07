@@ -63,4 +63,12 @@ public interface ReadingService {
      * @return 抄表记录列表
      */
     List<Reading> getByMonth(int year, int month, List<String> villageNames);
+
+    /**
+     * 查询最近异常抄表记录（用于仪表盘提醒）
+     *
+     * @param limit 返回条数上限
+     * @return 异常抄表列表，含户名和村名
+     */
+    List<Map<String, Object>> getAbnormalReadings(int limit);
 }
