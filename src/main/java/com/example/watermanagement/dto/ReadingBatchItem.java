@@ -19,4 +19,10 @@ public class ReadingBatchItem {
     /** 本次表底数 */
     @NotNull(message = "本次表底不能为空")
     private BigDecimal currentReading;
+
+    /** 计费用水量（可选，不传则使用实际用量 currentReading - previousReading） */
+    private BigDecimal chargeableUsage;
+
+    /** 备注 */
+    private String note;
 }

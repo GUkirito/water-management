@@ -58,4 +58,8 @@ public class Reading {
     /** 异常原因说明（如"表底倒转"、"用量突增"） */
     @Column(name = "abnormal_reason")
     private String abnormalReason;
+
+    /** 备注（如"已收"等标注） */
+    @Column(name = "note")
+    private String note;
 }

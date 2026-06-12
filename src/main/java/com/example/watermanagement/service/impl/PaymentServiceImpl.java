@@ -191,6 +191,8 @@ public class PaymentServiceImpl implements PaymentService {
         BigDecimal newPaid = bill.getActualPaid().add(request.getAmount());
         bill.setActualPaid(newPaid);
         bill.setStatus(calcStatus(newPaid, bill.getTotalFee()));
+        bill.setPaidAt(request.getPaidDate());
+        bill.setCollector(request.getOperator());
         materialBillRepository.save(bill);
 
         log.info("材料费缴费: 水表={}, 金额={}元, 累计已缴={}元",

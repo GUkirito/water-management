@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
@@ -46,6 +47,14 @@ public class MaterialBill {
     @Column(name = "status")
     @Builder.Default
     private String status = "未收";
+
+    /** 最近缴费日期 */
+    @Column(name = "paid_at", columnDefinition = "DATE")
+    private LocalDate paidAt;
+
+    /** 收款人 */
+    @Column(name = "collector")
+    private String collector;
 
     /** 创建时间 */
     @CreationTimestamp

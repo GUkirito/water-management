@@ -50,12 +50,14 @@ export const readingApi = {
   importReadings: (formData) => api.post('/readings/import', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),
-  batchSave: (items, year, month) => api.post('/readings/batch', items, {
-    params: { year, month }
+  batchSave: (items, readingDate) => api.post('/readings/batch', items, {
+    params: { readingDate }
   }),
   singleSave: (params) => api.post('/readings/single', null, { params }),
+  getByDate: (params) => api.get('/readings/by-date', { params }),
   getByMonth: (params) => api.get('/readings/by-month', { params }),
-  getAbnormal: (params) => api.get('/readings/abnormal', { params })
+  getAbnormal: (params) => api.get('/readings/abnormal', { params }),
+  getConfig: () => api.get('/readings/config')
 }
 
 // ==================== 收费管理 ====================
@@ -67,6 +69,13 @@ export const paymentApi = {
   pay: (data) => api.post('/payments/pay', data),
   getHistory: (waterMeterId) =>
     api.get('/payments/history', { params: { waterMeterId } })
+}
+
+// ==================== 材料费管理 ====================
+export const materialFeeApi = {
+  list: (params) => api.get('/material-fee/list', { params }),
+  collect: (data) => api.post('/material-fee/collect', data),
+  getHistory: (waterMeterId) => api.get('/material-fee/history', { params: { waterMeterId } })
 }
 
 // ==================== 报表中心 ====================

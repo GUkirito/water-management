@@ -2,6 +2,7 @@ package com.example.watermanagement.controller;
 
 import com.example.watermanagement.dto.ApiResponse;
 import com.example.watermanagement.dto.ReadingBatchItem;
+import com.example.watermanagement.dto.ReadingRowDTO;
 import com.example.watermanagement.entity.Reading;
 import com.example.watermanagement.service.ReadingService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -22,7 +23,7 @@ import java.util.Map;
 /**
  * 抄表管理 Controller
  * <p>
- * 提供抄表模板导出、Excel 导入、批量保存、按户录入、按月查询等功能。
+ * 提供抄表模板导出、Excel 导入、批量保存、按户录入、按月/按日查询等功能。
  */
 @Tag(name = "抄表管理", description = "抄表模板、批量导入、按户录入")
 @RestController
@@ -44,22 +45,37 @@ public class ReadingController {
             description = "上传已填写的 Excel，自动计算用量、检测异常、生成水费账单")
     @PostMapping("/import")
     public ApiResponse<Map<String, Object>> importReadings(
-            @Parameter(description = "抄表年份") @RequestParam int year,
-            @Parameter(description = "抄表月份") @RequestParam int month,
+            @Parameter(description = "抄表日期（yyyy-MM-dd）") @RequestParam String readingDate,
             @Parameter(description = "Excel 文件") @RequestParam("file") MultipartFile file) throws IOException {
-        Map<String, Object> result = readingService.importReadings(
-                file.getInputStream(), year, month);
+        LocalDate date = LocalDate.parse(readingDate);
+        Map<String, Object> result = readingService.importReadings(file.getInputStream(), date);
         return ApiResponse.ok("导入完成", result);
     }
 
+    @Operation(summary = "按日期和村名查询抄表数据",
+            description = "返回指定日期下某村所有户的抄表行数据，用于前端表格展示")
+    @GetMapping("/by-date")
+    public ApiResponse<List<ReadingRowDTO>> getByDate(
+            @Parameter(description = "抄表日期（yyyy-MM-dd）") @RequestParam String readingDate,
+            @Parameter(description = "村名") @RequestParam(required = false) String villageName) {
+        LocalDate date = LocalDate.parse(readingDate);
+        return ApiResponse.ok(readingService.getByDate(date, villageName));
+    }
+
+    @Operation(summary = "获取系统配置", description = "返回水价、异常阈值等前端所需配置")
+    @GetMapping("/config")
+    public ApiResponse<Map<String, Object>> getConfig() {
+        return ApiResponse.ok(readingService.getConfig());
+    }
+
     @Operation(summary = "批量保存表底数据",
-            description = "接收 JSON 数组 [{waterMeterId, currentReading}]，批量计算用量并生成水费账单")
+            description = "接收 JSON 数组 [{waterMeterId, currentReading, chargeableUsage, note}]，批量计算用量并生成水费账单")
     @PostMapping("/batch")
     public ApiResponse<Map<String, Object>> batchSave(
-            @Parameter(description = "抄表年份") @RequestParam int year,
-            @Parameter(description = "抄表月份") @RequestParam int month,
+            @Parameter(description = "抄表日期（yyyy-MM-dd）") @RequestParam String readingDate,
             @Valid @RequestBody List<ReadingBatchItem> items) {
-        Map<String, Object> result = readingService.batchSave(items, year, month);
+        LocalDate date = LocalDate.parse(readingDate);
+        Map<String, Object> result = readingService.batchSave(items, date);
         return ApiResponse.ok("批量保存完成", result);
     }
 
@@ -84,7 +100,7 @@ public class ReadingController {
 
     @Operation(summary = "查询异常抄表记录", description = "返回最近N条异常抄表，含户名村名，用于仪表盘提醒")
     @GetMapping("/abnormal")
-    public ApiResponse<List<java.util.Map<String, Object>>> getAbnormal(
+    public ApiResponse<List<Map<String, Object>>> getAbnormal(
             @Parameter(description = "返回条数") @RequestParam(defaultValue = "20") int limit) {
         return ApiResponse.ok(readingService.getAbnormalReadings(limit));
     }

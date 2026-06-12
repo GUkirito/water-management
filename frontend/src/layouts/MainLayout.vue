@@ -29,6 +29,10 @@
           <el-icon><Money /></el-icon>
           <span>收费管理</span>
         </el-menu-item>
+        <el-menu-item index="/material-fee">
+          <el-icon><Coin /></el-icon>
+          <span>材料费管理</span>
+        </el-menu-item>
         <el-menu-item index="/reports">
           <el-icon><Document /></el-icon>
           <span>报表中心</span>
@@ -55,7 +59,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { DataAnalysis, User, EditPen, Money, Document, Setting } from '@element-plus/icons-vue'
+import { DataAnalysis, User, EditPen, Money, Coin, Document, Setting } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const activeMenu = computed(() => route.path)

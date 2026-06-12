@@ -2,6 +2,7 @@ package com.example.watermanagement.service.impl;
 
 import com.example.watermanagement.dto.ReadingBatchItem;
 import com.example.watermanagement.dto.ReadingExportRow;
+import com.example.watermanagement.dto.ReadingRowDTO;
 import com.example.watermanagement.entity.Household;
 import com.example.watermanagement.entity.Reading;
 import com.example.watermanagement.entity.WaterBill;
@@ -11,6 +12,7 @@ import com.example.watermanagement.repository.ReadingRepository;
 import com.example.watermanagement.repository.WaterBillRepository;
 import com.example.watermanagement.service.ReadingService;
 import com.example.watermanagement.util.ExcelUtil;
+import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,7 +20,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import jakarta.persistence.EntityManager;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
@@ -56,7 +57,6 @@ public class ReadingServiceImpl implements ReadingService {
 
     @Override
     public void exportTemplate(List<String> villageNames, HttpServletResponse response) throws IOException {
-        // 1. 查询目标村名下所有活跃水表
         List<Household> households;
         if (villageNames != null && !villageNames.isEmpty()) {
             households = householdRepository.findByVillageNameInAndIsActiveTrue(villageNames);
@@ -64,23 +64,20 @@ public class ReadingServiceImpl implements ReadingService {
             households = householdRepository.findByIsActiveTrue();
         }
 
-        // 2. 获取每个水表的最新抄表记录（上次表底）
         List<String> meterIds = households.stream()
                 .map(Household::getWaterMeterId).collect(Collectors.toList());
         Map<String, BigDecimal> lastReadings = getLastReadings(meterIds);
 
-        // 3. 构建 Excel 数据行
         List<ReadingExportRow> rows = households.stream()
                 .map(h -> ReadingExportRow.builder()
                         .waterMeterId(h.getWaterMeterId())
                         .householdName(h.getHouseholdName())
                         .villageName(h.getVillageName())
                         .previousReading(lastReadings.getOrDefault(h.getWaterMeterId(), BigDecimal.ZERO))
-                        .currentReading(null)  // 空白，由抄表员填写
+                        .currentReading(null)
                         .build())
                 .collect(Collectors.toList());
 
-        // 4. 写出 Excel
         String filename = "抄表模板_" + LocalDate.now();
         ExcelUtil.export(response, filename, ReadingExportRow.class, rows);
         log.info("导出抄表模板: {} 户", rows.size());
@@ -90,7 +87,7 @@ public class ReadingServiceImpl implements ReadingService {
 
     @Override
     @Transactional
-    public Map<String, Object> importReadings(InputStream inputStream, int year, int month) {
+    public Map<String, Object> importReadings(InputStream inputStream, LocalDate readingDate) {
         List<ReadingExportRow> rows = ExcelUtil.read(inputStream, ReadingExportRow.class);
 
         int total = 0, abnormal = 0;
@@ -103,7 +100,7 @@ public class ReadingServiceImpl implements ReadingService {
                     continue;
                 }
                 Reading reading = processSingleReading(
-                        row.getWaterMeterId(), row.getCurrentReading(), year, month);
+                        row.getWaterMeterId(), row.getCurrentReading(), readingDate, null, null);
                 total++;
                 if (Boolean.TRUE.equals(reading.getIsAbnormal())) {
                     abnormal++;
@@ -126,14 +123,15 @@ public class ReadingServiceImpl implements ReadingService {
 
     @Override
     @Transactional
-    public Map<String, Object> batchSave(List<ReadingBatchItem> items, int year, int month) {
+    public Map<String, Object> batchSave(List<ReadingBatchItem> items, LocalDate readingDate) {
         int total = 0, abnormal = 0;
         List<String> errors = new ArrayList<>();
 
         for (ReadingBatchItem item : items) {
             try {
                 Reading reading = processSingleReading(
-                        item.getWaterMeterId(), item.getCurrentReading(), year, month);
+                        item.getWaterMeterId(), item.getCurrentReading(),
+                        readingDate, item.getChargeableUsage(), item.getNote());
                 total++;
                 if (Boolean.TRUE.equals(reading.getIsAbnormal())) {
                     abnormal++;
@@ -156,20 +154,16 @@ public class ReadingServiceImpl implements ReadingService {
     @Override
     @Transactional
     public Reading singleSave(String waterMeterId, BigDecimal currentReading, LocalDate readingDate) {
-        int year = readingDate.getYear();
-        int month = readingDate.getMonthValue();
-        return processSingleReading(waterMeterId, currentReading, year, month);
+        return processSingleReading(waterMeterId, currentReading, readingDate, null, null);
     }
 
     // ==================== 查询 ====================
 
     @Override
     public List<Reading> getByMonth(int year, int month, List<String> villageNames) {
-        // 计算当月的起止日期
         LocalDate start = LocalDate.of(year, month, 1);
         LocalDate end = start.plusMonths(1).minusDays(1);
 
-        // 如果指定了村名，先查出该村所有水表编号，再按日期范围查
         if (villageNames != null && !villageNames.isEmpty()) {
             List<String> meterIds = householdRepository
                     .findByVillageNameInAndIsActiveTrue(villageNames)
@@ -177,7 +171,6 @@ public class ReadingServiceImpl implements ReadingService {
             if (meterIds.isEmpty()) {
                 return Collections.emptyList();
             }
-            // 逐水表查当月记录
             return meterIds.stream()
                     .flatMap(mid -> readingRepository
                             .findByWaterMeterIdAndReadingDateBetween(mid, start, end).stream())
@@ -186,20 +179,99 @@ public class ReadingServiceImpl implements ReadingService {
         return readingRepository.findByReadingDateBetween(start, end);
     }
 
+    @Override
+    public List<ReadingRowDTO> getByDate(LocalDate readingDate, String villageName) {
+        // 获取该村所有活跃户
+        List<Household> households;
+        if (villageName != null && !villageName.isEmpty()) {
+            households = householdRepository.findByVillageNameInAndIsActiveTrue(List.of(villageName));
+        } else {
+            households = householdRepository.findByIsActiveTrue();
+        }
+
+        int billYear = readingDate.getYear();
+        int billMonth = readingDate.getMonthValue();
+
+        List<ReadingRowDTO> rows = new ArrayList<>();
+        for (Household h : households) {
+            String meterId = h.getWaterMeterId();
+
+            // 1. 查找当日是否已有抄表记录
+            Optional<Reading> existingReading = readingRepository
+                    .findByWaterMeterIdAndReadingDate(meterId, readingDate);
+
+            // 2. 查找对应的 WaterBill（计费用水量存在 water_bills.water_amount 中）
+            BigDecimal chargeableUsage = null;
+            Optional<WaterBill> existingBill = waterBillRepository
+                    .findByWaterMeterIdAndBillYearAndBillMonth(meterId, billYear, billMonth);
+            if (existingBill.isPresent()) {
+                chargeableUsage = existingBill.get().getWaterAmount();
+            }
+
+            if (existingReading.isPresent()) {
+                Reading r = existingReading.get();
+                rows.add(ReadingRowDTO.builder()
+                        .waterMeterId(meterId)
+                        .previousReading(r.getPreviousReading())
+                        .currentReading(r.getCurrentReading())
+                        .chargeableUsage(chargeableUsage)
+                        .usageAmount(r.getUsageAmount())
+                        .isAbnormal(r.getIsAbnormal())
+                        .abnormalReason(r.getAbnormalReason())
+                        .note(r.getNote())
+                        .build());
+            } else {
+                // 无当日记录：计算上次表底（最近一次抄表）
+                BigDecimal previousReading = getLastReadingBefore(meterId, readingDate);
+                rows.add(ReadingRowDTO.builder()
+                        .waterMeterId(meterId)
+                        .previousReading(previousReading)
+                        .currentReading(null)
+                        .chargeableUsage(null)
+                        .usageAmount(null)
+                        .isAbnormal(false)
+                        .abnormalReason(null)
+                        .note(null)
+                        .build());
+            }
+        }
+
+        return rows;
+    }
+
+    // ==================== 配置 ====================
+
+    @Override
+    public Map<String, Object> getConfig() {
+        Map<String, Object> config = new HashMap<>();
+        config.put("waterPrice", waterPrice);
+        config.put("abnormalThreshold", abnormalThreshold);
+        return config;
+    }
+
     // ==================== 私有方法 ====================
 
     /**
      * 处理单条抄表数据：计算用量 → 异常检测 → 保存 → 生成水费账单
+     *
+     * @param waterMeterId    水表编号
+     * @param currentReading  本次表底
+     * @param readingDate     抄表日期
+     * @param chargeableUsage 计费用水量（可选，不传则使用实际用量）
+     * @param note            备注
      */
     private Reading processSingleReading(String waterMeterId, BigDecimal currentReading,
-                                          int year, int month) {
+                                          LocalDate readingDate, BigDecimal chargeableUsage, String note) {
         // 校验水表存在
         Household household = householdRepository.findByWaterMeterId(waterMeterId)
                 .orElseThrow(() -> new BusinessException("水表不存在: " + waterMeterId));
 
         // 获取上次表底
-        BigDecimal previousReading = getLastReading(waterMeterId);
+        BigDecimal previousReading = getLastReadingBefore(waterMeterId, readingDate);
         BigDecimal usageAmount = currentReading.subtract(previousReading);
+
+        // 计费用水量：优先使用传入值，否则使用实际用量
+        BigDecimal effectiveChargeable = (chargeableUsage != null) ? chargeableUsage : usageAmount;
 
         // 异常检测
         boolean isAbnormal = false;
@@ -213,34 +285,38 @@ public class ReadingServiceImpl implements ReadingService {
         // 保存抄表记录
         Reading reading = Reading.builder()
                 .waterMeterId(waterMeterId)
-                .readingDate(LocalDate.of(year, month, 1)) // 统一存为每月1号
+                .readingDate(readingDate)
                 .currentReading(currentReading)
                 .previousReading(previousReading)
                 .usageAmount(usageAmount)
                 .isAbnormal(isAbnormal)
                 .abnormalReason(abnormalReason)
+                .note(note)
                 .build();
 
-        // 检查当月是否已有记录（唯一约束 water_meter_id + reading_date）
+        // 检查当天是否已有记录（唯一约束 water_meter_id + reading_date）
         var existingOpt = readingRepository
-                .findByWaterMeterIdAndReadingDate(waterMeterId, reading.getReadingDate());
+                .findByWaterMeterIdAndReadingDate(waterMeterId, readingDate);
         if (existingOpt.isPresent()) {
-            reading.setId(existingOpt.get().getId()); // 覆盖已有记录
+            reading.setId(existingOpt.get().getId());
         }
 
         reading = readingRepository.save(reading);
 
-        // 生成当月水费账单（应收水费 = 用量 × 水价）
-        BigDecimal waterCharge = usageAmount.compareTo(BigDecimal.ZERO) > 0
-                ? usageAmount.multiply(waterPrice).setScale(2, RoundingMode.HALF_UP)
+        // 生成水费账单（应收水费 = 计费用水量 × 水价）
+        int billYear = readingDate.getYear();
+        int billMonth = readingDate.getMonthValue();
+
+        BigDecimal waterCharge = effectiveChargeable.compareTo(BigDecimal.ZERO) > 0
+                ? effectiveChargeable.multiply(waterPrice).setScale(2, RoundingMode.HALF_UP)
                 : BigDecimal.ZERO;
 
         waterBillRepository
-                .findByWaterMeterIdAndBillYearAndBillMonth(waterMeterId, year, month)
+                .findByWaterMeterIdAndBillYearAndBillMonth(waterMeterId, billYear, billMonth)
                 .ifPresentOrElse(
                         existingBill -> {
                             // 更新已有账单
-                            existingBill.setWaterAmount(usageAmount);
+                            existingBill.setWaterAmount(effectiveChargeable);
                             existingBill.setWaterCharge(waterCharge);
                             waterBillRepository.save(existingBill);
                         },
@@ -248,9 +324,9 @@ public class ReadingServiceImpl implements ReadingService {
                             // 新建账单
                             WaterBill bill = WaterBill.builder()
                                     .waterMeterId(waterMeterId)
-                                    .billYear(year)
-                                    .billMonth(month)
-                                    .waterAmount(usageAmount)
+                                    .billYear(billYear)
+                                    .billMonth(billMonth)
+                                    .waterAmount(effectiveChargeable)
                                     .waterCharge(waterCharge)
                                     .actualWaterPaid(BigDecimal.ZERO)
                                     .waterStatus("未收")
@@ -262,15 +338,18 @@ public class ReadingServiceImpl implements ReadingService {
     }
 
     /**
-     * 获取某个水表的最新表底（上一次读数）
+     * 获取某个水表在指定日期之前的最新表底
      */
-    private BigDecimal getLastReading(String waterMeterId) {
+    private BigDecimal getLastReadingBefore(String waterMeterId, LocalDate beforeDate) {
         List<Reading> readings = readingRepository
                 .findByWaterMeterIdInOrderByReadingDateDesc(List.of(waterMeterId));
-        if (readings.isEmpty()) {
-            return BigDecimal.ZERO;
+        // 已按日期降序排列，取第一条在 beforeDate 之前的记录
+        for (Reading r : readings) {
+            if (r.getReadingDate().isBefore(beforeDate)) {
+                return r.getCurrentReading();
+            }
         }
-        return readings.get(0).getCurrentReading();
+        return BigDecimal.ZERO;
     }
 
     /**
@@ -281,7 +360,6 @@ public class ReadingServiceImpl implements ReadingService {
         Map<String, BigDecimal> result = new HashMap<>();
         List<Reading> allReadings = readingRepository
                 .findByWaterMeterIdInOrderByReadingDateDesc(meterIds);
-        // 已按日期降序排列，首次出现的即为最新记录
         Set<String> seen = new HashSet<>();
         for (Reading r : allReadings) {
             if (!seen.contains(r.getWaterMeterId())) {
@@ -289,7 +367,6 @@ public class ReadingServiceImpl implements ReadingService {
                 result.put(r.getWaterMeterId(), r.getCurrentReading());
             }
         }
-        // 没找到记录的默认表底为 0
         for (String id : meterIds) {
             result.putIfAbsent(id, BigDecimal.ZERO);
         }
@@ -298,8 +375,6 @@ public class ReadingServiceImpl implements ReadingService {
 
     /**
      * 异常检测：倒转（current < previous）或 突增（用量 > 阈值）
-     *
-     * @return 异常原因（null 表示正常）
      */
     private String checkAbnormal(BigDecimal current, BigDecimal previous) {
         if (current.compareTo(previous) < 0) {
