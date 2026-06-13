@@ -14,12 +14,6 @@ const routes = [
         meta: { title: '仪表盘' }
       },
       {
-        path: 'households',
-        name: 'Households',
-        component: () => import('@/views/Households.vue'),
-        meta: { title: '村民管理' }
-      },
-      {
         path: 'readings',
         name: 'Readings',
         component: () => import('@/views/Readings.vue'),

@@ -17,10 +17,6 @@
           <el-icon><DataAnalysis /></el-icon>
           <span>仪表盘</span>
         </el-menu-item>
-        <el-menu-item index="/households">
-          <el-icon><User /></el-icon>
-          <span>村民管理</span>
-        </el-menu-item>
         <el-menu-item index="/readings">
           <el-icon><EditPen /></el-icon>
           <span>抄表录入</span>
@@ -59,7 +55,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { DataAnalysis, User, EditPen, Money, Coin, Document, Setting } from '@element-plus/icons-vue'
+import { DataAnalysis, EditPen, Money, Coin, Document, Setting } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const activeMenu = computed(() => route.path)

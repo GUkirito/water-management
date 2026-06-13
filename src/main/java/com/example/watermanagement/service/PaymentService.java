@@ -1,7 +1,6 @@
 package com.example.watermanagement.service;
 
 import com.example.watermanagement.dto.PaymentRequest;
-import com.example.watermanagement.entity.MaterialBill;
 import com.example.watermanagement.entity.Payment;
 import com.example.watermanagement.entity.WaterBill;
 
@@ -16,11 +15,6 @@ public interface PaymentService {
      * 获取指定水表下所有未缴清的水费账单（water_status != '已收'）
      */
     List<WaterBill> getPendingWaterBills(String waterMeterId);
-
-    /**
-     * 获取指定水表下未缴清的材料费账单
-     */
-    MaterialBill getPendingMaterialBill(String waterMeterId);
 
     /**
      * 合并缴费：支持一次缴纳多个月水费

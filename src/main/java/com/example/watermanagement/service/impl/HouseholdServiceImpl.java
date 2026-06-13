@@ -3,10 +3,11 @@ package com.example.watermanagement.service.impl;
 import com.example.watermanagement.dto.HouseholdExportRow;
 import com.example.watermanagement.dto.HouseholdRequest;
 import com.example.watermanagement.entity.Household;
-import com.example.watermanagement.entity.MaterialBill;
 import com.example.watermanagement.exception.BusinessException;
 import com.example.watermanagement.repository.HouseholdRepository;
-import com.example.watermanagement.repository.MaterialBillRepository;
+import com.example.watermanagement.repository.PaymentRepository;
+import com.example.watermanagement.repository.ReadingRepository;
+import com.example.watermanagement.repository.WaterBillRepository;
 import com.example.watermanagement.service.HouseholdService;
 import com.example.watermanagement.util.ExcelUtil;
 import lombok.RequiredArgsConstructor;
@@ -16,7 +17,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -28,7 +32,9 @@ import java.util.stream.Collectors;
 public class HouseholdServiceImpl implements HouseholdService {
 
     private final HouseholdRepository householdRepository;
-    private final MaterialBillRepository materialBillRepository;
+    private final ReadingRepository readingRepository;
+    private final WaterBillRepository waterBillRepository;
+    private final PaymentRepository paymentRepository;
 
     @Override
     public Page<Household> list(List<String> villageNames, String waterMeterId, Pageable pageable) {
@@ -77,15 +83,6 @@ public class HouseholdServiceImpl implements HouseholdService {
                 .build();
         household = householdRepository.save(household);
 
-        // 同时创建材料费账单
-        MaterialBill materialBill = MaterialBill.builder()
-                .waterMeterId(household.getWaterMeterId())
-                .totalFee(household.getMaterialFeeTotal())
-                .actualPaid(java.math.BigDecimal.ZERO)
-                .status("未收")
-                .build();
-        materialBillRepository.save(materialBill);
-
         log.info("新增村民: {} [水表: {}]", household.getHouseholdName(), household.getWaterMeterId());
         return household;
     }
@@ -100,12 +97,6 @@ public class HouseholdServiceImpl implements HouseholdService {
             if (householdRepository.existsByWaterMeterId(request.getWaterMeterId())) {
                 throw new BusinessException("水表编号已被占用: " + request.getWaterMeterId());
             }
-            // 同步更新材料费账单的水表编号
-            materialBillRepository.findByWaterMeterId(household.getWaterMeterId())
-                    .ifPresent(mb -> {
-                        mb.setWaterMeterId(request.getWaterMeterId());
-                        materialBillRepository.save(mb);
-                    });
         }
 
         household.setHouseholdName(request.getHouseholdName());
@@ -124,9 +115,44 @@ public class HouseholdServiceImpl implements HouseholdService {
     @Transactional
     public void delete(Long id) {
         Household household = getById(id);
-        household.setIsActive(false);
-        householdRepository.save(household);
-        log.info("软删除村民: {} [水表: {}]", household.getHouseholdName(), household.getWaterMeterId());
+        String meterId = household.getWaterMeterId();
+        readingRepository.findByWaterMeterIdInOrderByReadingDateDesc(List.of(meterId))
+                .forEach(r -> readingRepository.delete(r));
+        waterBillRepository.findByWaterMeterId(meterId)
+                .forEach(wb -> {
+                    paymentRepository.findByBillTypeAndBillIdIn("water", List.of(wb.getId()))
+                            .forEach(p -> paymentRepository.delete(p));
+                    waterBillRepository.delete(wb);
+                });
+        householdRepository.delete(household);
+        log.info("物理删除村民: {} [水表: {}]", household.getHouseholdName(), meterId);
+    }
+
+    @Override
+    @Transactional
+    public void batchDelete(List<Long> ids) {
+        for (Long id : ids) { delete(id); }
+        log.info("批量物理删除村民: {} 户", ids.size());
+    }
+
+    @Override
+    @Transactional
+    public void deleteByVillage(String villageName) {
+        List<Household> list = householdRepository.findByVillageNameInAndIsActiveTrue(List.of(villageName));
+        for (Household h : list) { delete(h.getId()); }
+        log.info("按村物理删除: {} [{}户]", villageName, list.size());
+    }
+
+    @Override
+    @Transactional
+    public void batchUpdateVillage(List<Long> ids, String villageName) {
+        for (Long id : ids) {
+            householdRepository.findById(id).ifPresent(h -> {
+                h.setVillageName(villageName);
+                householdRepository.save(h);
+            });
+        }
+        log.info("批量改村组: {} 户 → {}", ids.size(), villageName);
     }
 
     @Override
@@ -205,12 +231,6 @@ public class HouseholdServiceImpl implements HouseholdService {
                     .build();
             householdRepository.save(household);
 
-            materialBillRepository.save(MaterialBill.builder()
-                    .waterMeterId(household.getWaterMeterId())
-                    .totalFee(household.getMaterialFeeTotal())
-                    .actualPaid(java.math.BigDecimal.ZERO)
-                    .status("未收")
-                    .build());
             count++;
         }
 
@@ -220,4 +240,148 @@ public class HouseholdServiceImpl implements HouseholdService {
         result.put("message", "成功导入 " + count + " 户");
         return result;
     }
+
+    @Override
+    @Transactional
+    public Map<String, Object> importFromWaterRegister(java.io.InputStream inputStream) {
+        // 使用 EasyExcel 同步读取所有行（返回 List<Map<Integer,String>>）
+        List<Object> rawRows = com.alibaba.excel.EasyExcel.read(inputStream)
+                .sheet().doReadSync();
+
+        int inserted = 0;
+        int skipped = 0;
+        List<String> errors = new ArrayList<>();
+
+        if (rawRows.size() < 3) {
+            errors.add("Excel 文件格式不正确：至少需要 3 行");
+            Map<String, Object> result = new HashMap<>();
+            result.put("inserted", 0);
+            result.put("skipped", 0);
+            result.put("errors", errors);
+            return result;
+        }
+
+        // 提取村名：遍历前几行找含"村（居）委会"的行
+        String villageName = "";
+        for (int vi = 0; vi < Math.min(rawRows.size(), 3); vi++) {
+            String s = rowToString(rawRows.get(vi));
+            Pattern p = Pattern.compile("委会\\s*[：:]\\s*(\\S+?)\\s*村");
+            Matcher m = p.matcher(s);
+            if (m.find()) { villageName = m.group(1).trim(); break; }
+        }
+        if (villageName.isEmpty()) {
+            errors.add("无法从前3行提取村名");
+        }
+
+        // 动态检测表头行（含"序号"或"户主姓名"）
+        int headerRow = -1;
+        for (int hi = 0; hi < Math.min(rawRows.size(), 4); hi++) {
+            Map<Integer, String> hr = toRowMap(rawRows.get(hi));
+            if (hr != null) {
+                String v0 = hr.get(0); String v1 = hr.get(1);
+                if (("序号".equals(v0) || "序号".equals(v1))
+                        && ("户主姓名".equals(v1) || "户主姓名".equals(hr.get(2)))) {
+                    headerRow = hi; break;
+                }
+            }
+        }
+        int dataStart = (headerRow >= 0) ? headerRow + 1 : 3;
+
+        for (int i = dataStart; i < rawRows.size(); i++) {
+            Map<Integer, String> rowMap = toRowMap(rawRows.get(i));
+            if (rowMap == null) continue;
+
+            String householdName = cellStr(rowMap, 1);
+            String waterMeterId = cellStr(rowMap, 2);
+            String phone = cellStr(rowMap, 3);
+
+            if (householdName == null || householdName.isBlank()
+                    || waterMeterId == null || waterMeterId.isBlank()) {
+                errors.add("第" + (i + 1) + "行：户主姓名或表号为空，跳过");
+                continue;
+            }
+
+            // 检查是否已存在
+            if (householdRepository.existsByWaterMeterId(waterMeterId.trim())) {
+                skipped++;
+                errors.add("跳过：第" + (i + 1) + "行 表号 " + waterMeterId.trim() + " 已存在");
+                continue;
+            }
+
+            // 创建新户
+            Household household = Household.builder()
+                    .householdName(householdName.trim())
+                    .phone(phone != null ? phone.trim() : "")
+                    .villageName(villageName)
+                    .waterMeterId(waterMeterId.trim())
+                    .materialFeeTotal(new BigDecimal("1500.00"))
+                    .isActive(true)
+                    .build();
+            householdRepository.save(household);
+
+            inserted++;
+        }
+
+        log.info("水费登记册导入完成: 新增{}户, 跳过{}户（已存在）, 错误{}条", inserted, skipped, errors.size());
+        Map<String, Object> result = new HashMap<>();
+        result.put("inserted", inserted);
+        result.put("skipped", skipped);
+        result.put("errors", errors);
+        return result;
+    }
+
+    /** 将行对象转为字符串（用于提取村名等） */
+    @SuppressWarnings("unchecked")
+    private String rowToString(Object rowObj) {
+        if (rowObj == null) return "";
+        if (rowObj instanceof Map) {
+            return ((Map<Integer, String>) rowObj).values().stream()
+                    .filter(Objects::nonNull)
+                    .map(Object::toString)
+                    .collect(Collectors.joining());
+        }
+        if (rowObj instanceof List) {
+            return ((List<Object>) rowObj).stream()
+                    .filter(Objects::nonNull)
+                    .map(Object::toString)
+                    .collect(Collectors.joining());
+        }
+        return rowObj.toString();
+    }
+
+    /** 将 doReadSync 返回的行对象转为 Map（兼容 List 和 Map 两种格式） */
+    @SuppressWarnings("unchecked")
+    private Map<Integer, String> toRowMap(Object rowObj) {
+        if (rowObj == null) return null;
+        if (rowObj instanceof Map) {
+            return (Map<Integer, String>) rowObj;
+        }
+        if (rowObj instanceof List) {
+            List<Object> list = (List<Object>) rowObj;
+            if (list.isEmpty() || list.stream().allMatch(r -> r == null || r.toString().isBlank())) {
+                return null;
+            }
+            Map<Integer, String> map = new LinkedHashMap<>();
+            for (int j = 0; j < list.size(); j++) {
+                Object v = list.get(j);
+                map.put(j, v != null ? v.toString().trim() : null);
+            }
+            return map;
+        }
+        return null;
+    }
+
+    /** 从行 Map 安全获取指定列的字符串值 */
+    private String cellStr(Map<Integer, String> row, int index) {
+        Object obj = row.get(index);
+        if (obj == null) return null;
+        String val = obj.toString().trim();
+        if (val.contains("E") || val.contains("e")) {
+            try {
+                val = new java.math.BigDecimal(val).toPlainString();
+            } catch (NumberFormatException ignored) {}
+        }
+        return val.isEmpty() ? null : val;
+    }
+
 }

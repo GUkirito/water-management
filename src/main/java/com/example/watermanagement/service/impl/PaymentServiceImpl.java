@@ -1,11 +1,9 @@
 package com.example.watermanagement.service.impl;
 
 import com.example.watermanagement.dto.PaymentRequest;
-import com.example.watermanagement.entity.MaterialBill;
 import com.example.watermanagement.entity.Payment;
 import com.example.watermanagement.entity.WaterBill;
 import com.example.watermanagement.exception.BusinessException;
-import com.example.watermanagement.repository.MaterialBillRepository;
 import com.example.watermanagement.repository.PaymentRepository;
 import com.example.watermanagement.repository.WaterBillRepository;
 import com.example.watermanagement.service.PaymentService;
@@ -33,7 +31,6 @@ import java.util.List;
 public class PaymentServiceImpl implements PaymentService {
 
     private final WaterBillRepository waterBillRepository;
-    private final MaterialBillRepository materialBillRepository;
     private final PaymentRepository paymentRepository;
 
     @Override
@@ -42,23 +39,15 @@ public class PaymentServiceImpl implements PaymentService {
         return waterBillRepository.findByWaterMeterIdAndWaterStatusNot(waterMeterId, "已收");
     }
 
-    @Override
-    public MaterialBill getPendingMaterialBill(String waterMeterId) {
-        return materialBillRepository.findByWaterMeterId(waterMeterId)
-                .orElseThrow(() -> new BusinessException("未找到材料费账单: 水表编号=" + waterMeterId));
-    }
 
     @Override
     @Transactional
     public List<Payment> pay(PaymentRequest request) {
         if ("water".equals(request.getBillType())) {
             return payWaterBills(request);
-        } else if ("material".equals(request.getBillType())) {
-            return payMaterialBill(request);
-        } else {
-            throw new BusinessException("不支持的账单类型: " + request.getBillType()
-                    + "（仅支持 water / material）");
         }
+        // 材料费已迁移到独立系统 MaterialRecordService.collect()
+        throw new BusinessException("材料费请使用材料费管理页面操作");
     }
 
     @Override
@@ -73,11 +62,6 @@ public class PaymentServiceImpl implements PaymentService {
         if (!waterBillIds.isEmpty()) {
             allPayments.addAll(paymentRepository.findByBillTypeAndBillIdIn("water", waterBillIds));
         }
-
-        // 材料费相关的缴费记录
-        materialBillRepository.findByWaterMeterId(waterMeterId).ifPresent(mb -> {
-            allPayments.addAll(paymentRepository.findByBillTypeAndBillIdIn("material", List.of(mb.getId())));
-        });
 
         // 按缴费日期降序排列
         allPayments.sort((a, b) -> b.getPaidDate().compareTo(a.getPaidDate()));
@@ -158,47 +142,6 @@ public class PaymentServiceImpl implements PaymentService {
         log.info("缴费完成: 共{}笔, 合计{}元", payments.size(),
                 payments.stream().map(Payment::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add));
         return payments;
-    }
-
-    /**
-     * 材料费缴费（通常只有一笔）
-     */
-    private List<Payment> payMaterialBill(PaymentRequest request) {
-        if (request.getBillIds().size() != 1) {
-            throw new BusinessException("材料费只能逐笔缴纳，billIds 长度必须为 1");
-        }
-
-        MaterialBill bill = materialBillRepository.findById(request.getBillIds().get(0))
-                .orElseThrow(() -> new BusinessException("未找到材料费账单: id=" + request.getBillIds().get(0)));
-
-        if ("已收".equals(bill.getStatus())) {
-            throw new BusinessException("该材料费已缴清");
-        }
-
-        // 创建缴费记录
-        Payment payment = Payment.builder()
-                .billType("material")
-                .billId(bill.getId())
-                .amount(request.getAmount())
-                .paidDate(request.getPaidDate())
-                .paymentMethod(request.getPaymentMethod())
-                .operator(request.getOperator())
-                .note(request.getNote())
-                .build();
-        payment = paymentRepository.save(payment);
-
-        // 更新材料费账单
-        BigDecimal newPaid = bill.getActualPaid().add(request.getAmount());
-        bill.setActualPaid(newPaid);
-        bill.setStatus(calcStatus(newPaid, bill.getTotalFee()));
-        bill.setPaidAt(request.getPaidDate());
-        bill.setCollector(request.getOperator());
-        materialBillRepository.save(bill);
-
-        log.info("材料费缴费: 水表={}, 金额={}元, 累计已缴={}元",
-                bill.getWaterMeterId(), request.getAmount(), newPaid);
-
-        return List.of(payment);
     }
 
     /**

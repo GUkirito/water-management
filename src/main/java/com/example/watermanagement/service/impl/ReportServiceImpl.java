@@ -1,13 +1,10 @@
 package com.example.watermanagement.service.impl;
 
-import com.example.watermanagement.dto.MaterialSummaryRow;
 import com.example.watermanagement.dto.WaterBillReportRow;
 import com.example.watermanagement.entity.Household;
-import com.example.watermanagement.entity.MaterialBill;
 import com.example.watermanagement.entity.WaterBill;
 import com.example.watermanagement.exception.BusinessException;
 import com.example.watermanagement.repository.HouseholdRepository;
-import com.example.watermanagement.repository.MaterialBillRepository;
 import com.example.watermanagement.repository.WaterBillRepository;
 import com.example.watermanagement.service.ReportService;
 import com.example.watermanagement.util.ExcelUtil;
@@ -32,7 +29,6 @@ import java.util.stream.Collectors;
 public class ReportServiceImpl implements ReportService {
 
     private final WaterBillRepository waterBillRepository;
-    private final MaterialBillRepository materialBillRepository;
     private final HouseholdRepository householdRepository;
 
     // ==================== 水费月报表 ====================
@@ -76,45 +72,6 @@ public class ReportServiceImpl implements ReportService {
         String filename = year + "年" + month + "月_水费报表";
         ExcelUtil.export(response, filename, WaterBillReportRow.class, data);
         log.info("导出水费月报表: {}年{}月, {}条", year, month, data.size());
-    }
-
-    // ==================== 材料费统计表 ====================
-
-    @Override
-    public List<MaterialSummaryRow> getMaterialSummaryData(List<String> villageNames) {
-        List<Household> households = getHouseholds(villageNames);
-        Map<String, Household> meterMap = households.stream()
-                .collect(Collectors.toMap(Household::getWaterMeterId, h -> h, (a, b) -> a));
-
-        List<MaterialSummaryRow> rows = new ArrayList<>();
-        for (Household h : households) {
-            materialBillRepository.findByWaterMeterId(h.getWaterMeterId())
-                    .ifPresent(mb -> {
-                        BigDecimal unpaid = mb.getTotalFee().subtract(mb.getActualPaid());
-                        rows.add(MaterialSummaryRow.builder()
-                                .waterMeterId(h.getWaterMeterId())
-                                .householdName(h.getHouseholdName())
-                                .villageName(h.getVillageName())
-                                .totalFee(mb.getTotalFee())
-                                .actualPaid(mb.getActualPaid())
-                                .unpaid(unpaid)
-                                .status(mb.getStatus())
-                                .build());
-                    });
-        }
-        return rows;
-    }
-
-    @Override
-    public void exportMaterialSummary(List<String> villageNames,
-                                       HttpServletResponse response) throws IOException {
-        List<MaterialSummaryRow> data = getMaterialSummaryData(villageNames);
-        if (data.isEmpty()) {
-            throw new BusinessException("没有符合条件的数据");
-        }
-        String filename = "材料费统计表";
-        ExcelUtil.export(response, filename, MaterialSummaryRow.class, data);
-        log.info("导出材料费统计表: {}条", data.size());
     }
 
     // ==================== 私有方法 ====================

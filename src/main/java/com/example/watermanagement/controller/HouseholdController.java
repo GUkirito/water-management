@@ -71,6 +71,31 @@ public class HouseholdController {
         return ApiResponse.ok("删除成功", null);
     }
 
+    @Operation(summary = "批量删除村民")
+    @PostMapping("/batch-delete")
+    public ApiResponse<Void> batchDelete(@RequestBody Map<String, List<Long>> body) {
+        householdService.batchDelete(body.get("ids"));
+        return ApiResponse.ok("批量删除成功", null);
+    }
+
+    @Operation(summary = "按村名删除该村所有村民")
+    @DeleteMapping("/delete-by-village")
+    public ApiResponse<Void> deleteByVillage(@RequestParam String villageName) {
+        householdService.deleteByVillage(villageName);
+        return ApiResponse.ok("已删除村组: " + villageName, null);
+    }
+
+    @Operation(summary = "批量修改村民的村组名称")
+    @PutMapping("/batch-update-village")
+    public ApiResponse<Void> batchUpdateVillage(@RequestBody Map<String, Object> body) {
+        @SuppressWarnings("unchecked")
+        List<Long> ids = ((List<Number>) body.get("ids")).stream()
+                .map(Number::longValue).toList();
+        String villageName = body.get("villageName").toString();
+        householdService.batchUpdateVillage(ids, villageName);
+        return ApiResponse.ok("已更新 " + ids.size() + " 户的村组为 " + villageName, null);
+    }
+
     @Operation(summary = "导出村民信息到Excel", description = "按筛选条件导出")
     @GetMapping("/export")
     public void export(@Parameter(description = "村名列表") @RequestParam(required = false) List<String> villageNames,
@@ -88,5 +113,14 @@ public class HouseholdController {
             return ApiResponse.fail(result.get("message").toString());
         }
         return ApiResponse.ok(result.get("message").toString(), result);
+    }
+
+    @Operation(summary = "从水费登记册导入村民",
+            description = "上传 水费登记册.xlsx，解析第2行提取村名，第4行起提取户主姓名/表号/电话，表号已存在则跳过")
+    @PostMapping("/import-from-register")
+    public ApiResponse<Map<String, Object>> importFromRegister(
+            @Parameter(description = "水费登记册 Excel 文件") @RequestParam("file") MultipartFile file) throws IOException {
+        Map<String, Object> result = householdService.importFromWaterRegister(file.getInputStream());
+        return ApiResponse.ok("导入完成", result);
     }
 }

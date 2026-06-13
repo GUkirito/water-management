@@ -43,6 +43,21 @@ public interface HouseholdService {
     void delete(Long id);
 
     /**
+     * 批量软删除
+     */
+    void batchDelete(List<Long> ids);
+
+    /**
+     * 按村名软删除该村所有户
+     */
+    void deleteByVillage(String villageName);
+
+    /**
+     * 批量修改村民的村组名称
+     */
+    void batchUpdateVillage(List<Long> ids, String villageName);
+
+    /**
      * 查询所有活跃用户（用于抄表模板导出等）
      */
     List<Household> findAllActive();
@@ -58,4 +73,20 @@ public interface HouseholdService {
      * @return 导入结果 {total, message} 或 {conflicts, message}
      */
     java.util.Map<String, Object> importFromExcel(java.io.InputStream inputStream);
+
+    /**
+     * 从水费登记册 Excel 导入村民信息
+     * <p>
+     * Excel 格式为 水费登记册.xlsx：
+     * - 第1行：标题（跳过）
+     * - 第2行：村名从 "XX村委会：XXX村" 中提取
+     * - 第3行：表头（跳过）
+     * - 第4行起：数据行（序号, 户主姓名, 表号, 电话号码, ...）
+     * <p>
+     * 表号已存在则跳过，不存在则新建。
+     *
+     * @param inputStream Excel 文件流
+     * @return {inserted: int, skipped: int, errors: List<String>}
+     */
+    java.util.Map<String, Object> importFromWaterRegister(java.io.InputStream inputStream);
 }

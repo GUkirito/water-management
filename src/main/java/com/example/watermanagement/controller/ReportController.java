@@ -1,7 +1,6 @@
 package com.example.watermanagement.controller;
 
 import com.example.watermanagement.dto.ApiResponse;
-import com.example.watermanagement.dto.MaterialSummaryRow;
 import com.example.watermanagement.dto.WaterBillReportRow;
 import com.example.watermanagement.service.ReportService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -48,20 +47,4 @@ public class ReportController {
         reportService.exportWaterBillReport(year, month, villageNames, response);
     }
 
-    // ==================== 材料费统计表 ====================
-
-    @Operation(summary = "查询材料费统计数据", description = "返回各户材料费应收、已缴、欠费、状态")
-    @GetMapping("/material-summary")
-    public ApiResponse<List<MaterialSummaryRow>> getMaterialSummary(
-            @Parameter(description = "村名列表（多选）") @RequestParam(required = false) List<String> villageNames) {
-        return ApiResponse.ok(reportService.getMaterialSummaryData(villageNames));
-    }
-
-    @Operation(summary = "导出材料费统计表 Excel", description = "包含水表编号、户名、应收材料费、已缴材料费、欠费金额、状态")
-    @GetMapping("/material-summary/export")
-    public void exportMaterialSummary(
-            @Parameter(description = "村名列表（多选）") @RequestParam(required = false) List<String> villageNames,
-            HttpServletResponse response) throws IOException {
-        reportService.exportMaterialSummary(villageNames, response);
-    }
 }

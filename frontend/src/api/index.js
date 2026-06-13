@@ -38,7 +38,13 @@ export const householdApi = {
   exportExcel: (params) => api.get('/households/export', { params, responseType: 'blob' }),
   importExcel: (formData) => api.post('/households/import', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
-  })
+  }),
+  importFromRegister: (formData) => api.post('/households/import-from-register', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  batchUpdateVillage: (ids, villageName) => api.put('/households/batch-update-village', { ids, villageName }),
+  batchDelete: (ids) => api.post('/households/batch-delete', { ids }),
+  deleteByVillage: (villageName) => api.delete('/households/delete-by-village', { params: { villageName } })
 }
 
 // ==================== 抄表管理 ====================
@@ -71,11 +77,22 @@ export const paymentApi = {
     api.get('/payments/history', { params: { waterMeterId } })
 }
 
-// ==================== 材料费管理 ====================
-export const materialFeeApi = {
-  list: (params) => api.get('/material-fee/list', { params }),
-  collect: (data) => api.post('/material-fee/collect', data),
-  getHistory: (waterMeterId) => api.get('/material-fee/history', { params: { waterMeterId } })
+// ==================== 材料费管理（独立系统） ====================
+export const materialRecordApi = {
+  list: (params) => api.get('/material-records/list', { params }),
+  getById: (id) => api.get(`/material-records/${id}`),
+  create: (data) => api.post('/material-records', data),
+  update: (id, data) => api.put(`/material-records/${id}`, data),
+  delete: (id) => api.delete(`/material-records/${id}`),
+  batchDelete: (ids) => api.post('/material-records/batch-delete', { ids }),
+  importExcel: (formData) => api.post('/material-records/import', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  exportExcel: (params) => api.get('/material-records/export', {
+    params, responseType: 'blob'
+  }),
+  collect: (id, data) => api.post(`/material-records/${id}/collect`, data),
+  getPayments: (id) => api.get(`/material-records/${id}/payments`)
 }
 
 // ==================== 报表中心 ====================

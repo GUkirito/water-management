@@ -2,7 +2,6 @@ package com.example.watermanagement.controller;
 
 import com.example.watermanagement.dto.ApiResponse;
 import com.example.watermanagement.dto.PaymentRequest;
-import com.example.watermanagement.entity.MaterialBill;
 import com.example.watermanagement.entity.Payment;
 import com.example.watermanagement.entity.WaterBill;
 import com.example.watermanagement.service.PaymentService;
@@ -34,13 +33,6 @@ public class PaymentController {
     public ApiResponse<List<WaterBill>> getPendingWater(
             @Parameter(description = "水表编号") @RequestParam String waterMeterId) {
         return ApiResponse.ok(paymentService.getPendingWaterBills(waterMeterId));
-    }
-
-    @Operation(summary = "获取未缴清材料费账单")
-    @GetMapping("/pending-material")
-    public ApiResponse<MaterialBill> getPendingMaterial(
-            @Parameter(description = "水表编号") @RequestParam String waterMeterId) {
-        return ApiResponse.ok(paymentService.getPendingMaterialBill(waterMeterId));
     }
 
     @Operation(summary = "缴费",

@@ -1,6 +1,5 @@
 package com.example.watermanagement.service;
 
-import com.example.watermanagement.dto.MaterialSummaryRow;
 import com.example.watermanagement.dto.WaterBillReportRow;
 import jakarta.servlet.http.HttpServletResponse;
 
@@ -29,18 +28,4 @@ public interface ReportService {
      */
     List<WaterBillReportRow> getWaterBillReportData(int year, int month,
                                                      List<String> villageNames);
-
-    /**
-     * 导出材料费统计表
-     *
-     * @param villageNames 村名列表
-     * @param response     HTTP 响应
-     */
-    void exportMaterialSummary(List<String> villageNames,
-                               HttpServletResponse response) throws IOException;
-
-    /**
-     * 查询材料费统计数据（供前端展示）
-     */
-    List<MaterialSummaryRow> getMaterialSummaryData(List<String> villageNames);
 }
