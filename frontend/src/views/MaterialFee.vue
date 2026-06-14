@@ -54,12 +54,8 @@
             <el-tag :type="statusType(row.status)" size="small">{{ row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="最近收费日期" width="170">
-          <template #default="{ row }">
-            <el-date-picker v-model="row.paidAt" type="date" value-format="YYYY-MM-DD"
-              size="small" style="width:150px" placeholder="选择日期"
-              @change="(val) => updateField(row.id, 'paidAt', val)" />
-          </template>
+        <el-table-column prop="paidAt" label="最近收费日期" width="130">
+          <template #default="{ row }">{{ row.paidAt || '--' }}</template>
         </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
@@ -189,12 +185,6 @@ async function loadData() {
 function handleFilterChange() { currentPage.value = 1 }
 function onSelectionChange(rows) { selectedRows.value = rows }
 
-async function updateField(id, field, value) {
-  if (value == null) return
-  try {
-    await materialRecordApi.update(id, { [field]: value })
-  } catch {}
-}
 
 function handleCreate() {
   formMode.value = 'create'; formVisible.value = true
