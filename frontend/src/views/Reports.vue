@@ -65,7 +65,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { householdApi, reportApi } from '@/api'
+import { householdApi, reportApi, materialRecordApi } from '@/api'
 
 const activeTab = ref('water')
 const waterMonth = ref(new Date().toISOString().slice(0, 7))
@@ -98,15 +98,27 @@ async function exportWaterReport() {
 }
 
 async function loadMaterialReport() {
-  const params = {}
-  if (matVillages.value.length) params.villageNames = matVillages.value.join(',')
-  materialData.value = await reportApi.getMaterialSummary(params) || []
+  const result = await materialRecordApi.list({ page: 0, size: 10000 })
+  let list = result?.content || []
+  if (matVillages.value.length) {
+    const villages = new Set(matVillages.value)
+    list = list.filter(r => villages.has(r.villageName))
+  }
+  materialData.value = list.map(r => ({
+    waterMeterId: r.waterMeterId,
+    householdName: r.householdName,
+    villageName: r.villageName,
+    totalFee: r.totalFee,
+    actualPaid: r.actualPaid,
+    unpaid: (r.totalFee || 0) - (r.actualPaid || 0),
+    status: r.status
+  }))
 }
 
 async function exportMaterialReport() {
   const params = {}
   if (matVillages.value.length) params.villageNames = matVillages.value.join(',')
-  const blob = await reportApi.exportMaterialSummary(params)
+  const blob = await materialRecordApi.exportExcel(params)
   downloadBlob(blob, '材料费统计表.xlsx')
   ElMessage.success('导出成功')
 }

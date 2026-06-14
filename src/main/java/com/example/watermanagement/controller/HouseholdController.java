@@ -64,7 +64,7 @@ public class HouseholdController {
         return ApiResponse.ok("更新成功", householdService.update(id, request));
     }
 
-    @Operation(summary = "删除村民（软删除）", description = "将 is_active 置为 0，数据不物理删除")
+    @Operation(summary = "删除村民（物理删除）", description = "永久物理删除村民及关联的抄表记录、水费账单和缴费记录")
     @DeleteMapping("/delete/{id}")
     public ApiResponse<Void> delete(@Parameter(description = "村民ID") @PathVariable Long id) {
         householdService.delete(id);

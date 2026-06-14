@@ -8,6 +8,10 @@ const routes = [
     redirect: '/dashboard',
     children: [
       {
+        path: 'households',
+        redirect: '/readings'
+      },
+      {
         path: 'dashboard',
         name: 'Dashboard',
         component: () => import('@/views/Dashboard.vue'),

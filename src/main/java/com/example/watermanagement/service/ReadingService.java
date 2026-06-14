@@ -68,4 +68,9 @@ public interface ReadingService {
      * 获取系统配置（水价、异常阈值等）
      */
     Map<String, Object> getConfig();
+
+    /**
+     * 更新系统配置（水价、异常阈值等），持久化到配置文件
+     */
+    void updateConfig(Map<String, Object> config);
 }

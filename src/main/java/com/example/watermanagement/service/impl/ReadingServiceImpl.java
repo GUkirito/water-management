@@ -12,6 +12,7 @@ import com.example.watermanagement.repository.ReadingRepository;
 import com.example.watermanagement.repository.WaterBillRepository;
 import com.example.watermanagement.service.ReadingService;
 import com.example.watermanagement.util.ExcelUtil;
+import jakarta.annotation.PostConstruct;
 import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
@@ -53,6 +57,23 @@ public class ReadingServiceImpl implements ReadingService {
     @Value("${water.abnormal.threshold:100}")
     private BigDecimal abnormalThreshold;
 
+    private java.util.Properties configProps = new java.util.Properties();
+    private static final File CONFIG_FILE =
+        new File(System.getProperty("user.home"), ".water-management/config.properties");
+
+    @PostConstruct
+    void loadConfig() {
+        if (CONFIG_FILE.exists()) {
+            try (FileInputStream fis = new FileInputStream(CONFIG_FILE)) {
+                configProps.load(fis);
+                String wp = configProps.getProperty("water.price");
+                if (wp != null) waterPrice = new BigDecimal(wp);
+                String at = configProps.getProperty("water.abnormal.threshold");
+                if (at != null) abnormalThreshold = new BigDecimal(at);
+            } catch (Exception e) { log.warn("Load config failed", e); }
+        }
+    }
+
     // ==================== 模板导出 ====================
 
     @Override
@@ -75,6 +96,8 @@ public class ReadingServiceImpl implements ReadingService {
                         .villageName(h.getVillageName())
                         .previousReading(lastReadings.getOrDefault(h.getWaterMeterId(), BigDecimal.ZERO))
                         .currentReading(null)
+                        .waterPrice(waterPrice)
+                        .waterCharge(null)
                         .build())
                 .collect(Collectors.toList());
 
@@ -247,6 +270,23 @@ public class ReadingServiceImpl implements ReadingService {
         config.put("waterPrice", waterPrice);
         config.put("abnormalThreshold", abnormalThreshold);
         return config;
+    }
+
+    @Override
+    public void updateConfig(Map<String, Object> config) {
+        if (config.containsKey("waterPrice")) {
+            waterPrice = new BigDecimal(config.get("waterPrice").toString());
+            configProps.setProperty("water.price", waterPrice.toString());
+        }
+        if (config.containsKey("abnormalThreshold")) {
+            abnormalThreshold = new BigDecimal(config.get("abnormalThreshold").toString());
+            configProps.setProperty("water.abnormal.threshold", abnormalThreshold.toString());
+        }
+        CONFIG_FILE.getParentFile().mkdirs();
+        try (FileOutputStream fos = new FileOutputStream(CONFIG_FILE)) {
+            configProps.store(fos, "Water Management Config");
+        } catch (Exception e) { log.error("Save config failed", e); }
+        log.info("Config updated: waterPrice={}, threshold={}", waterPrice, abnormalThreshold);
     }
 
     // ==================== 私有方法 ====================

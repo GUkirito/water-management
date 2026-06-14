@@ -68,6 +68,13 @@ public class ReadingController {
         return ApiResponse.ok(readingService.getConfig());
     }
 
+    @Operation(summary = "更新系统配置")
+    @PostMapping("/config")
+    public ApiResponse<Void> updateConfig(@RequestBody Map<String, Object> body) {
+        readingService.updateConfig(body);
+        return ApiResponse.ok("配置已更新", null);
+    }
+
     @Operation(summary = "批量保存表底数据",
             description = "接收 JSON 数组 [{waterMeterId, currentReading, chargeableUsage, note}]，批量计算用量并生成水费账单")
     @PostMapping("/batch")

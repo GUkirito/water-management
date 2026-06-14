@@ -38,4 +38,12 @@ public class ReadingExportRow {
     /** 本次表底（抄表员填写） */
     @ExcelProperty("本次表底")
     private BigDecimal currentReading;
+
+    /** 水价（元/吨） */
+    @ExcelProperty("水价")
+    private BigDecimal waterPrice;
+
+    /** 水费（用水量 x 水价，模板中为空） */
+    @ExcelProperty("水费")
+    private BigDecimal waterCharge;
 }

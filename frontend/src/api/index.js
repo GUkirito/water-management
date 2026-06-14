@@ -63,15 +63,14 @@ export const readingApi = {
   getByDate: (params) => api.get('/readings/by-date', { params }),
   getByMonth: (params) => api.get('/readings/by-month', { params }),
   getAbnormal: (params) => api.get('/readings/abnormal', { params }),
-  getConfig: () => api.get('/readings/config')
+  getConfig: () => api.get('/readings/config'),
+  updateConfig: (data) => api.post('/readings/config', data)
 }
 
 // ==================== 收费管理 ====================
 export const paymentApi = {
   getPendingWater: (waterMeterId) =>
     api.get('/payments/pending-water', { params: { waterMeterId } }),
-  getPendingMaterial: (waterMeterId) =>
-    api.get('/payments/pending-material', { params: { waterMeterId } }),
   pay: (data) => api.post('/payments/pay', data),
   getHistory: (waterMeterId) =>
     api.get('/payments/history', { params: { waterMeterId } })
@@ -99,11 +98,6 @@ export const materialRecordApi = {
 export const reportApi = {
   getWaterBillReport: (params) => api.get('/reports/water-bill', { params }),
   exportWaterBillReport: (params) => api.get('/reports/water-bill/export', {
-    params,
-    responseType: 'blob'
-  }),
-  getMaterialSummary: (params) => api.get('/reports/material-summary', { params }),
-  exportMaterialSummary: (params) => api.get('/reports/material-summary/export', {
     params,
     responseType: 'blob'
   })

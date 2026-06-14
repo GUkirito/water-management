@@ -61,6 +61,7 @@
 <script setup>
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { readingApi } from '@/api'
 
 const waterPrice = ref(1.8)
 const threshold = ref(100)
@@ -69,9 +70,12 @@ const savingConfig = ref(false)
 async function saveConfig() {
   savingConfig.value = true
   try {
-    // 模拟保存（前端当前仅做内存存储）
-    await new Promise(resolve => setTimeout(resolve, 500))
-    ElMessage.success(`配置已更新：水价 ¥${waterPrice.value} / 吨，异常阈值 ${threshold.value} 吨`)
-  } finally { savingConfig.value = false }
+    await readingApi.updateConfig({
+      waterPrice: waterPrice.value,
+      abnormalThreshold: threshold.value
+    })
+    ElMessage.success('配置已保存')
+  } catch { ElMessage.error('保存失败') }
+  finally { savingConfig.value = false }
 }
 </script>
