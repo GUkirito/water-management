@@ -105,6 +105,7 @@ export const reportApi = {
 
 // ==================== 系统设置 ====================
 export const settingsApi = {
+  getInfo: () => api.get('/settings/info'),
   downloadBackup: () => api.get('/settings/backup/download', { responseType: 'blob' })
 }
 

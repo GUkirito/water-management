@@ -1,5 +1,6 @@
 package com.example.watermanagement.controller;
 
+import com.example.watermanagement.dto.ApiResponse;
 import com.example.watermanagement.exception.BusinessException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -19,6 +20,9 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 
+import java.util.HashMap;
+import java.util.Map;
+
 @Slf4j
 @Tag(name = "系统设置", description = "系统设置与数据备份")
 @RestController
@@ -28,6 +32,15 @@ public class SettingsController {
 
     @Value("${spring.datasource.url}")
     private String datasourceUrl;
+
+    @Operation(summary = "获取系统设置信息", description = "返回数据库路径等系统信息")
+    @GetMapping("/info")
+    public ApiResponse<Map<String, String>> getInfo() {
+        String dbPath = datasourceUrl.replace("jdbc:sqlite:", "");
+        Map<String, String> info = new HashMap<>();
+        info.put("dbFilePath", dbPath);
+        return ApiResponse.ok(info);
+    }
 
     @Operation(summary = "下载数据库备份", description = "将当前 SQLite 数据库文件打包下载")
     @GetMapping("/backup/download")

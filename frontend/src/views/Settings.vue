@@ -36,7 +36,7 @@
         </el-button>
         <el-divider />
         <el-descriptions :column="1" border size="small">
-          <el-descriptions-item label="数据库文件">data/water_meter.db</el-descriptions-item>
+          <el-descriptions-item label="数据库文件">{{ dbFilePath }}</el-descriptions-item>
           <el-descriptions-item label="备份建议">每月备份一次，保留最近12个月</el-descriptions-item>
           <el-descriptions-item label="恢复方法">停止应用 → 用备份文件替换原文件 → 重启应用</el-descriptions-item>
         </el-descriptions>
@@ -66,6 +66,7 @@ const waterPrice = ref(1.8)
 const threshold = ref(100)
 const savingConfig = ref(false)
 const backingUp = ref(false)
+const dbFilePath = ref('加载中...')
 
 async function saveConfig() {
   savingConfig.value = true
@@ -85,6 +86,10 @@ onMounted(async () => {
     waterPrice.value = config.waterPrice || 1.8
     threshold.value = config.abnormalThreshold || 100
   } catch { /* 使用默认值 */ }
+  try {
+    const info = await settingsApi.getInfo()
+    dbFilePath.value = info.dbFilePath || '未知'
+  } catch { dbFilePath.value = '未知' }
 })
 
 async function downloadBackup() {
