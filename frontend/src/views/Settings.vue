@@ -13,8 +13,8 @@
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="saveConfig" :loading="savingConfig">💾 保存配置</el-button>
-          <span style="margin-left:12px;color:#909399;font-size:12px">
-            ⚠ 修改后需在后端 application.yml 中同步更新永久生效
+          <span style="margin-left:12px;color:#67C23A;font-size:12px">
+            ✅ 保存后立即生效，无需重启
           </span>
         </el-form-item>
       </el-form>
@@ -59,7 +59,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { readingApi } from '@/api'
 
@@ -78,4 +78,12 @@ async function saveConfig() {
   } catch { ElMessage.error('保存失败') }
   finally { savingConfig.value = false }
 }
+
+onMounted(async () => {
+  try {
+    const config = await readingApi.getConfig()
+    waterPrice.value = config.waterPrice || 1.8
+    threshold.value = config.abnormalThreshold || 100
+  } catch { /* 使用默认值 */ }
+})
 </script>

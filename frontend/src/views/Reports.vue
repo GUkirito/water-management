@@ -36,7 +36,7 @@
       <!-- 材料费统计表 -->
       <div v-if="activeTab === 'material'">
         <div style="display:flex;gap:12px;margin-bottom:16px;align-items:center">
-          <el-select v-model="matVillages" multiple placeholder="按村筛选" clearable style="width:200px">
+          <el-select v-model="matVillages" placeholder="按村筛选" clearable style="width:200px">
             <el-option v-for="v in villageList" :key="v" :label="v" :value="v" />
           </el-select>
           <el-button type="primary" @click="loadMaterialReport">查询</el-button>
@@ -70,7 +70,7 @@ import { householdApi, reportApi, materialRecordApi } from '@/api'
 const activeTab = ref('water')
 const waterMonth = ref(new Date().toISOString().slice(0, 7))
 const waterVillages = ref([])
-const matVillages = ref([])
+const matVillages = ref('')
 const villageList = ref([])
 const waterData = ref([])
 const materialData = ref([])
@@ -100,9 +100,8 @@ async function exportWaterReport() {
 async function loadMaterialReport() {
   const result = await materialRecordApi.list({ page: 0, size: 10000 })
   let list = result?.content || []
-  if (matVillages.value.length) {
-    const villages = new Set(matVillages.value)
-    list = list.filter(r => villages.has(r.villageName))
+  if (matVillages.value) {
+    list = list.filter(r => r.villageName === matVillages.value)
   }
   materialData.value = list.map(r => ({
     waterMeterId: r.waterMeterId,
@@ -117,7 +116,7 @@ async function loadMaterialReport() {
 
 async function exportMaterialReport() {
   const params = {}
-  if (matVillages.value.length) params.villageNames = matVillages.value.join(',')
+  if (matVillages.value) params.villageName = matVillages.value
   const blob = await materialRecordApi.exportExcel(params)
   downloadBlob(blob, '材料费统计表.xlsx')
   ElMessage.success('导出成功')
