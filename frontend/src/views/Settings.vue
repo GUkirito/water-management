@@ -25,21 +25,20 @@
       <el-alert
         title="备份提示"
         type="info"
-        description="SQLite 数据库文件位于项目 data/water_meter.db，备份即复制该文件。恢复即用备份文件替换当前文件。"
+        description="点击下方按钮下载当前数据库文件，定期备份以防数据丢失。恢复时需停止应用后替换数据库文件。"
         show-icon
         :closable="false"
         style="margin-bottom:16px"
       />
       <div style="display:flex;flex-direction:column;gap:12px">
-        <div>
-          <p style="color:#909399;font-size:13px">📋 手动备份：直接复制 data/water_meter.db 文件到安全位置</p>
-          <p style="color:#909399;font-size:13px">🔄 手动恢复：将备份的 .db 文件覆盖到 data/ 目录，重启应用</p>
-        </div>
+        <el-button type="primary" @click="downloadBackup" :loading="backingUp" size="large">
+          📥 一键下载备份
+        </el-button>
         <el-divider />
         <el-descriptions :column="1" border size="small">
           <el-descriptions-item label="数据库文件">data/water_meter.db</el-descriptions-item>
-          <el-descriptions-item label="备份建议">每月自动备份一次，保留最近12个月</el-descriptions-item>
-          <el-descriptions-item label="恢复注意事项">恢复后会覆盖当前数据，请先备份当前数据库</el-descriptions-item>
+          <el-descriptions-item label="备份建议">每月备份一次，保留最近12个月</el-descriptions-item>
+          <el-descriptions-item label="恢复方法">停止应用 → 用备份文件替换原文件 → 重启应用</el-descriptions-item>
         </el-descriptions>
       </div>
     </el-card>
@@ -61,11 +60,12 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { readingApi } from '@/api'
+import { readingApi, settingsApi } from '@/api'
 
 const waterPrice = ref(1.8)
 const threshold = ref(100)
 const savingConfig = ref(false)
+const backingUp = ref(false)
 
 async function saveConfig() {
   savingConfig.value = true
@@ -86,4 +86,19 @@ onMounted(async () => {
     threshold.value = config.abnormalThreshold || 100
   } catch { /* 使用默认值 */ }
 })
+
+async function downloadBackup() {
+  backingUp.value = true
+  try {
+    const blob = await settingsApi.downloadBackup()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'backup_' + new Date().toISOString().slice(0, 10) + '_water_meter.db'
+    a.click()
+    URL.revokeObjectURL(url)
+    ElMessage.success('备份下载成功')
+  } catch { ElMessage.error('备份下载失败') }
+  finally { backingUp.value = false }
+}
 </script>

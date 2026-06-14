@@ -161,7 +161,6 @@
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowDown } from '@element-plus/icons-vue'
 import { householdApi, readingApi } from '@/api'
 
 const readingDate = ref(new Date().toISOString().slice(0,10))
