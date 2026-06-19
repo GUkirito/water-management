@@ -73,7 +73,9 @@ export const paymentApi = {
     api.get('/payments/pending-water', { params: { waterMeterId } }),
   pay: (data) => api.post('/payments/pay', data),
   getHistory: (waterMeterId) =>
-    api.get('/payments/history', { params: { waterMeterId } })
+    api.get('/payments/history', { params: { waterMeterId } }),
+  getAllWaterBills: (waterMeterId) =>
+    api.get('/payments/all-water-bills', { params: { waterMeterId } })
 }
 
 // ==================== 材料费管理（独立系统） ====================

@@ -355,9 +355,10 @@ public class ReadingServiceImpl implements ReadingService {
                 .findByWaterMeterIdAndBillYearAndBillMonth(waterMeterId, billYear, billMonth)
                 .ifPresentOrElse(
                         existingBill -> {
-                            // 更新已有账单
+                            // 更新已有账单，同时重算状态（防止改量后已收账单变欠费死账）
                             existingBill.setWaterAmount(effectiveChargeable);
                             existingBill.setWaterCharge(waterCharge);
+                            existingBill.setWaterStatus(calcBillStatus(existingBill.getActualWaterPaid(), waterCharge));
                             waterBillRepository.save(existingBill);
                         },
                         () -> {
@@ -390,6 +391,15 @@ public class ReadingServiceImpl implements ReadingService {
             }
         }
         return BigDecimal.ZERO;
+    }
+
+    /**
+     * 根据已缴金额和应收金额计算账单状态
+     */
+    private String calcBillStatus(BigDecimal paid, BigDecimal total) {
+        if (paid.compareTo(BigDecimal.ZERO) == 0) return "未收";
+        if (paid.compareTo(total) >= 0) return "已收";
+        return "部分收";
     }
 
     /**

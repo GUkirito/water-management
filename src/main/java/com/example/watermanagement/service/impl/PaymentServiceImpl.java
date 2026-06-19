@@ -68,6 +68,11 @@ public class PaymentServiceImpl implements PaymentService {
         return allPayments;
     }
 
+    @Override
+    public List<WaterBill> getAllWaterBills(String waterMeterId) {
+        return waterBillRepository.findByWaterMeterId(waterMeterId);
+    }
+
     // ==================== 私有方法 ====================
 
     /**

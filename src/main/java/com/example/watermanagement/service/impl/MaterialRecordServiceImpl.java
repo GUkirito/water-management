@@ -216,7 +216,6 @@ public class MaterialRecordServiceImpl implements MaterialRecordService {
             log.error("材料费导入失败", e);
         }
 
-        skipped = totalRows - inserted;
         log.info("材料费导入完成: 总数{}行, 成功{}行, 跳过{}行, 错误{}条", totalRows, inserted, skipped, errors.size());
 
         Map<String, Object> result = new HashMap<>();

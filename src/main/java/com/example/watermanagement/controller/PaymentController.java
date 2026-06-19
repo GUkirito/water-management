@@ -43,10 +43,17 @@ public class PaymentController {
         return ApiResponse.ok("缴费成功，共 " + payments.size() + " 笔", payments);
     }
 
-    @Operation(summary = "按户查询缴费历史", description = "按水表编号查询所有缴费记录（含水费和材料费）")
+    @Operation(summary = "获取缴费历史", description = "按水表编号查询所有缴费记录（含水费和材料费）")
     @GetMapping("/history")
     public ApiResponse<List<Payment>> getHistory(
             @Parameter(description = "水表编号") @RequestParam String waterMeterId) {
         return ApiResponse.ok(paymentService.getHistory(waterMeterId));
+    }
+
+    @Operation(summary = "获取所有水费账单（含已缴清）", description = "用于缴费历史页面展示账单年月信息")
+    @GetMapping("/all-water-bills")
+    public ApiResponse<List<WaterBill>> getAllWaterBills(
+            @Parameter(description = "水表编号") @RequestParam String waterMeterId) {
+        return ApiResponse.ok(paymentService.getAllWaterBills(waterMeterId));
     }
 }

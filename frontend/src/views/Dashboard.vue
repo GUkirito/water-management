@@ -1,6 +1,6 @@
 <template>
-  <div>
-    <!-- 统计卡片 -->
+  <div v-loading="statsLoading" element-loading-text="加载中...">
+    <!-- 水费统计卡片 -->
     <el-row :gutter="20">
       <el-col :span="6">
         <el-card shadow="hover">
@@ -83,6 +83,7 @@
 import { reactive, ref, onMounted } from 'vue'
 import { householdApi, reportApi, readingApi, materialRecordApi } from '@/api'
 
+const statsLoading = ref(false)
 const stats = reactive({
   totalHouseholds: 0,
   monthlyCharge: '0.00',
@@ -97,40 +98,43 @@ const matStats = reactive({
 const abnormalReadings = ref([])
 
 onMounted(async () => {
+  statsLoading.value = true
   try {
-    const result = await householdApi.list({ page: 0, size: 1 })
-    stats.totalHouseholds = result?.totalElements || 0
-  } catch { /* 数据为空时忽略 */ }
+    try {
+      const result = await householdApi.list({ page: 0, size: 1 })
+      stats.totalHouseholds = result?.totalElements || 0
+    } catch { /* 数据为空时忽略 */ }
 
-  const now = new Date()
-  try {
-    const rows = await reportApi.getWaterBillReport({ year: now.getFullYear(), month: now.getMonth() + 1 })
-    if (rows?.length) {
-      let charge = 0, paid = 0
-      rows.forEach(r => { charge += r.waterCharge || 0; paid += r.actualWaterPaid || 0 })
-      stats.monthlyCharge = charge.toFixed(2)
-      stats.monthlyPaid = paid.toFixed(2)
-      stats.collectionRate = charge > 0 ? ((paid / charge) * 100).toFixed(1) : '100.0'
-    }
-  } catch { /* 忽略 */ }
+    const now = new Date()
+    try {
+      const rows = await reportApi.getWaterBillReport({ year: now.getFullYear(), month: now.getMonth() + 1 })
+      if (rows?.length) {
+        let charge = 0, paid = 0
+        rows.forEach(r => { charge += r.waterCharge || 0; paid += r.actualWaterPaid || 0 })
+        stats.monthlyCharge = charge.toFixed(2)
+        stats.monthlyPaid = paid.toFixed(2)
+        stats.collectionRate = charge > 0 ? ((paid / charge) * 100).toFixed(1) : '100.0'
+      }
+    } catch { /* 忽略 */ }
 
-  // 材料费统计
-  try {
-    const matResult = await materialRecordApi.list({ page: 0, size: 10000 })
-    const matList = matResult?.content || []
-    if (matList.length) {
-      let totalFee = 0, totalPaid = 0
-      matList.forEach(r => { totalFee += Number(r.totalFee || 0); totalPaid += Number(r.actualPaid || 0) })
-      matStats.totalFee = totalFee.toFixed(2)
-      matStats.totalPaid = totalPaid.toFixed(2)
-      matStats.collectionRate = totalFee > 0 ? ((totalPaid / totalFee) * 100).toFixed(1) : '100.0'
-    }
-  } catch { /* 忽略 */ }
+    try {
+      const matResult = await materialRecordApi.list({ page: 0, size: 10000 })
+      const matList = matResult?.content || []
+      if (matList.length) {
+        let totalFee = 0, totalPaid = 0
+        matList.forEach(r => { totalFee += Number(r.totalFee || 0); totalPaid += Number(r.actualPaid || 0) })
+        matStats.totalFee = totalFee.toFixed(2)
+        matStats.totalPaid = totalPaid.toFixed(2)
+        matStats.collectionRate = totalFee > 0 ? ((totalPaid / totalFee) * 100).toFixed(1) : '100.0'
+      }
+    } catch { /* 忽略 */ }
 
-  // 异常抄表
-  try {
-    const abnormal = await readingApi.getAbnormal({ limit: 20 })
-    abnormalReadings.value = abnormal || []
-  } catch { /* 忽略 */ }
+    try {
+      const abnormal = await readingApi.getAbnormal({ limit: 20 })
+      abnormalReadings.value = abnormal || []
+    } catch { /* 忽略 */ }
+  } finally {
+    statsLoading.value = false
+  }
 })
 </script>

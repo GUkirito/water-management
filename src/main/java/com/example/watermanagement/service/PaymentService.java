@@ -25,4 +25,8 @@ public interface PaymentService {
      * 按水表编号查询缴费历史
      */
     List<Payment> getHistory(String waterMeterId);
+    /**
+     * 获取指定水表下所有水费账单（含已缴清，供历史查询用）
+     */
+    List<WaterBill> getAllWaterBills(String waterMeterId);
 }

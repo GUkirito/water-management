@@ -84,6 +84,15 @@
         <el-button size="small" type="danger" @click="batchDeleteHouseholds" :disabled="selectedHouseholdIds.length===0">
           🗑 批量删除({{selectedHouseholdIds.length}})
         </el-button>
+        <!-- 抄表进度 -->
+        <div v-if="tableData.length > 0" style="display:flex;align-items:center;gap:8px;margin-left:auto">
+          <span style="font-size:13px;color:#606266;white-space:nowrap">当日进度：</span>
+          <el-progress :percentage="readingProgress" style="width:100px" :stroke-width="8" :show-text="false"
+            :status="readingProgress === 100 ? 'success' : ''" />
+          <span style="font-size:13px;color:#303133;white-space:nowrap;font-weight:500">
+            {{ readingDoneCount }} / {{ tableData.length }} 户
+          </span>
+        </div>
       </div>
 
       <!-- 批量改村组 -->
@@ -103,9 +112,11 @@
           @input="filterTable" @clear="filterTable" />
       </div>
 
-      <!-- 表格 -->
+      <!-- 表格 / 空状态 -->
       <div style="flex:1;background:#fff;padding:12px;border-radius:8px;display:flex;flex-direction:column;overflow:hidden">
-        <el-table :data="pagedTableData" border stripe style="width:100%;flex:1"
+        <el-table v-if="tableData.length > 0 || selectedVillage !== ''"
+          :data="pagedTableData" border stripe style="width:100%;flex:1"
+          :row-class-name="rowClassName"
           @row-click="onRowClick" highlight-current-row @selection-change="onSelectionChange">
           <el-table-column type="selection" width="40" />
           <el-table-column type="index" label="#" width="45" />
@@ -148,7 +159,10 @@
           </el-table-column>
           <el-table-column v-if="showMoreColumns" prop="abnormalReason" label="异常原因" min-width="140" />
         </el-table>
-        <div style="display:flex;justify-content:flex-end;align-items:center;padding:8px 0;gap:8px">
+        <el-empty v-else description="← 从左侧选择村组，开始录入抄表数据" :image-size="80"
+          style="flex:1;display:flex;flex-direction:column;justify-content:center" />
+        <div v-if="tableData.length > 0 || selectedVillage !== ''"
+          style="display:flex;justify-content:flex-end;align-items:center;padding:8px 0;gap:8px">
           <el-pagination v-model:current-page="tablePage" v-model:page-size="tablePageSize"
             :page-sizes="[10,20,50,100]" :total="filteredTableData.length"
             layout="total,sizes,prev,pager,next" size="small" />
@@ -168,6 +182,7 @@ const selectedVillage = ref('')
 const allVillages = ref([])
 const filterKeyword = ref('')
 const waterPrice = ref(1.8)
+const abnormalThreshold = ref(100)
 const saving = ref(false)
 const showMoreColumns = ref(false)
 const tableKeyword = ref('')
@@ -184,6 +199,14 @@ const savingHousehold = ref(false)
 const tableData = ref([])
 const selectedHouseholdIds = ref([])
 const batchVillage = ref('')
+
+// 抄表进度
+const readingDoneCount = computed(() => tableData.value.filter(r => r.currentReading && !isNaN(r.currentReading)).length)
+const readingProgress = computed(() => tableData.value.length ? Math.round(readingDoneCount.value / tableData.value.length * 100) : 0)
+
+function rowClassName({ row }) {
+  return row.isAbnormal ? 'row-abnormal' : ''
+}
 
 // 导出命令处理
 function handleExportCommand(cmd) {
@@ -221,8 +244,8 @@ const pagedTableData = computed(() => {
   return filteredTableData.value.slice(start, start + tablePageSize.value)
 })
 
-function onSearchChange() {} // computed handles filtering
-function filterTable() {} // computed handles it
+function onSearchChange() {}
+function filterTable() {}
 
 function selectVillage(v) {
   selectedVillage.value = v
@@ -344,13 +367,20 @@ async function batchDeleteHouseholds() {
 }
 
 function calcRow(row) {
-  if (!row.currentReading||isNaN(row.currentReading)) { row.usageAmount=null; row.chargeableUsage=null; row.waterCharge=null; row.isAbnormal=false; row.abnormalReason=''; return }
+  if (!row.currentReading||isNaN(row.currentReading)) {
+    row.usageAmount=null; row.chargeableUsage=null; row.waterCharge=null; row.isAbnormal=false; row.abnormalReason=''; return
+  }
   const cur=parseFloat(row.currentReading), prev=parseFloat(row.previousReading)||0
-  row.usageAmount=(cur-prev).toFixed(2)
-  row.isAbnormal=cur<prev; row.abnormalReason=cur<prev?'表底倒转':''
-  row.chargeableUsage=cur-prev>0?Number((cur-prev).toFixed(2)):0
+  const usage = cur - prev
+  row.usageAmount=usage.toFixed(2)
+  const reverseAbnormal = cur < prev
+  const spikeAbnormal = usage > abnormalThreshold.value
+  row.isAbnormal = reverseAbnormal || spikeAbnormal
+  row.abnormalReason = reverseAbnormal ? '表底倒转' : spikeAbnormal ? `用量突增（${usage.toFixed(2)}吨）` : ''
+  row.chargeableUsage=usage>0?Number(usage.toFixed(2)):0
   calcCharge(row)
 }
+
 function calcCharge(row) {
   const c=row.chargeableUsage
   row.waterCharge=c!=null&&!isNaN(c)&&c>=0?(c*waterPrice.value).toFixed(2):null
@@ -379,7 +409,6 @@ async function exportTemplate() {
 }
 
 async function batchSave() {
-  if(!selectedVillage.value){ElMessage.warning('请先选择村组');return}
   const items=tableData.value.filter(r=>r.currentReading&&!isNaN(r.currentReading)).map(r=>{
     const item={waterMeterId:r.waterMeterId,currentReading:parseFloat(r.currentReading)}
     if(r.chargeableUsage!=null&&!isNaN(r.chargeableUsage)) item.chargeableUsage=parseFloat(r.chargeableUsage)
@@ -391,11 +420,16 @@ async function batchSave() {
 }
 
 onMounted(async ()=>{
-  try { const c=await readingApi.getConfig(); waterPrice.value=c.waterPrice||1.8 } catch {}
+  try {
+    const c=await readingApi.getConfig()
+    waterPrice.value=c.waterPrice||1.8
+    abnormalThreshold.value=c.abnormalThreshold||100
+  } catch {}
   await loadAllVillages()
 })
 </script>
 
 <style scoped>
 .is-error :deep(.el-input__inner) { border-color:#F56C6C!important; background:#fef0f0!important }
+:deep(.row-abnormal td) { background-color:#fff5f5 !important; }
 </style>
