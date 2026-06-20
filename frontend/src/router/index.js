@@ -7,10 +7,7 @@ const routes = [
     component: MainLayout,
     redirect: '/dashboard',
     children: [
-      {
-        path: 'households',
-        redirect: '/readings'
-      },
+      { path: 'households', redirect: '/readings' },
       {
         path: 'dashboard',
         name: 'Dashboard',
@@ -27,13 +24,13 @@ const routes = [
         path: 'billing',
         name: 'Billing',
         component: () => import('@/views/Billing.vue'),
-        meta: { title: '收费管理' }
+        meta: { title: '缴费管理' }
       },
       {
         path: 'material-fee',
         name: 'MaterialFee',
         component: () => import('@/views/MaterialFee.vue'),
-        meta: { title: '材料费管理' }
+        meta: { title: '材料费' }
       },
       {
         path: 'reports',

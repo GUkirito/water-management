@@ -1,81 +1,70 @@
 <template>
-  <div v-loading="statsLoading" element-loading-text="加载中...">
-    <!-- 水费统计卡片 -->
-    <el-row :gutter="20">
-      <el-col :span="6">
-        <el-card shadow="hover">
-          <div style="text-align:center">
-            <div style="font-size:14px;color:#909399">总户数</div>
-            <div style="font-size:32px;font-weight:bold;color:#409EFF;margin:10px 0">{{ stats.totalHouseholds }}</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card shadow="hover">
-          <div style="text-align:center">
-            <div style="font-size:14px;color:#909399">本月应收水费</div>
-            <div style="font-size:32px;font-weight:bold;color:#E6A23C;margin:10px 0">¥{{ stats.monthlyCharge }}</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card shadow="hover">
-          <div style="text-align:center">
-            <div style="font-size:14px;color:#909399">本月实收水费</div>
-            <div style="font-size:32px;font-weight:bold;color:#67C23A;margin:10px 0">¥{{ stats.monthlyPaid }}</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card shadow="hover">
-          <div style="text-align:center">
-            <div style="font-size:14px;color:#909399">本月收缴率</div>
-            <div style="font-size:32px;font-weight:bold;color:#F56C6C;margin:10px 0">{{ stats.collectionRate }}%</div>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
+  <div class="wm-page" v-loading="statsLoading" element-loading-text="正在加载概览...">
+    <section class="wm-page-header">
+      <div class="wm-page-title">
+        <h1>仪表盘</h1>
+        <p>查看当前收缴、异常抄表和材料费收缴情况，帮助你快速掌握村务状态。</p>
+      </div>
+      <div class="wm-table-actions">
+        <span class="wm-chip">本月：{{ currentMonthLabel }}</span>
+        <span class="wm-chip">异常抄表 {{ abnormalReadings.length }} 条</span>
+      </div>
+    </section>
 
-    <!-- 材料费统计卡片 -->
-    <el-row :gutter="20" style="margin-top:20px">
-      <el-col :span="8">
-        <el-card shadow="hover">
-          <div style="text-align:center">
-            <div style="font-size:14px;color:#909399">材料费应收总额</div>
-            <div style="font-size:32px;font-weight:bold;color:#E6A23C;margin:10px 0">¥{{ matStats.totalFee }}</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :span="8">
-        <el-card shadow="hover">
-          <div style="text-align:center">
-            <div style="font-size:14px;color:#909399">材料费实收总额</div>
-            <div style="font-size:32px;font-weight:bold;color:#67C23A;margin:10px 0">¥{{ matStats.totalPaid }}</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :span="8">
-        <el-card shadow="hover">
-          <div style="text-align:center">
-            <div style="font-size:14px;color:#909399">材料费收缴率</div>
-            <div style="font-size:32px;font-weight:bold;color:#F56C6C;margin:10px 0">{{ matStats.collectionRate }}%</div>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
+    <section class="wm-card-grid">
+      <div class="wm-stat-card">
+        <div class="wm-stat-label">总户数</div>
+        <div class="wm-stat-value is-primary">{{ stats.totalHouseholds }}</div>
+      </div>
+      <div class="wm-stat-card">
+        <div class="wm-stat-label">本月应收水费</div>
+        <div class="wm-stat-value is-warning">¥{{ stats.monthlyCharge }}</div>
+      </div>
+      <div class="wm-stat-card">
+        <div class="wm-stat-label">本月实收水费</div>
+        <div class="wm-stat-value is-success">¥{{ stats.monthlyPaid }}</div>
+      </div>
+      <div class="wm-stat-card">
+        <div class="wm-stat-label">水费收缴率</div>
+        <div class="wm-stat-value is-danger">{{ stats.collectionRate }}%</div>
+      </div>
+    </section>
 
-    <!-- 异常抄表提醒 -->
-    <el-card style="margin-top:20px" header="异常抄表提醒" shadow="hover">
-      <el-table :data="abnormalReadings" stripe size="small" max-height="350">
-        <el-table-column prop="readingDate" label="日期" width="120">
-          <template #default="{ row }">{{ row.readingDate?.slice(0, 10) }}</template>
-        </el-table-column>
-        <el-table-column prop="householdName" label="户名" width="100" />
-        <el-table-column prop="villageName" label="村名" width="100" />
-        <el-table-column prop="abnormalReason" label="异常原因" min-width="200" show-overflow-tooltip />
-      </el-table>
-      <el-empty v-if="!abnormalReadings.length" description="暂无异常" :image-size="60" />
-    </el-card>
+    <section class="wm-card-grid">
+      <div class="wm-stat-card">
+        <div class="wm-stat-label">材料费应收总额</div>
+        <div class="wm-stat-value is-warning">¥{{ matStats.totalFee }}</div>
+      </div>
+      <div class="wm-stat-card">
+        <div class="wm-stat-label">材料费实收总额</div>
+        <div class="wm-stat-value is-success">¥{{ matStats.totalPaid }}</div>
+      </div>
+      <div class="wm-stat-card">
+        <div class="wm-stat-label">材料费收缴率</div>
+        <div class="wm-stat-value is-danger">{{ matStats.collectionRate }}%</div>
+      </div>
+    </section>
+
+    <section class="wm-panel">
+      <div class="wm-panel-body">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">
+          <div>
+            <div style="font-size:16px;font-weight:600;color:var(--wm-text)">异常抄表提醒</div>
+            <div class="wm-muted" style="font-size:13px;margin-top:4px">这里展示需要人工确认的抄表记录。</div>
+          </div>
+          <span class="wm-chip">共 {{ abnormalReadings.length }} 条</span>
+        </div>
+        <el-table :data="abnormalReadings" stripe size="small" max-height="350" border>
+          <el-table-column prop="readingDate" label="日期" width="120">
+            <template #default="{ row }">{{ row.readingDate?.slice(0, 10) }}</template>
+          </el-table-column>
+          <el-table-column prop="householdName" label="户名" width="120" />
+          <el-table-column prop="villageName" label="村名" width="120" />
+          <el-table-column prop="abnormalReason" label="异常原因" min-width="220" show-overflow-tooltip />
+        </el-table>
+        <el-empty v-if="!abnormalReadings.length" description="暂无异常记录" :image-size="72" class="wm-empty" />
+      </div>
+    </section>
   </div>
 </template>
 
@@ -84,6 +73,7 @@ import { reactive, ref, onMounted } from 'vue'
 import { householdApi, reportApi, readingApi, materialRecordApi } from '@/api'
 
 const statsLoading = ref(false)
+const currentMonthLabel = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' })
 const stats = reactive({
   totalHouseholds: 0,
   monthlyCharge: '0.00',
@@ -103,36 +93,42 @@ onMounted(async () => {
     try {
       const result = await householdApi.list({ page: 0, size: 1 })
       stats.totalHouseholds = result?.totalElements || 0
-    } catch { /* 数据为空时忽略 */ }
+    } catch {}
 
     const now = new Date()
     try {
       const rows = await reportApi.getWaterBillReport({ year: now.getFullYear(), month: now.getMonth() + 1 })
       if (rows?.length) {
-        let charge = 0, paid = 0
-        rows.forEach(r => { charge += r.waterCharge || 0; paid += r.actualWaterPaid || 0 })
+        let charge = 0
+        let paid = 0
+        rows.forEach(r => {
+          charge += Number(r.waterCharge || 0)
+          paid += Number(r.actualWaterPaid || 0)
+        })
         stats.monthlyCharge = charge.toFixed(2)
         stats.monthlyPaid = paid.toFixed(2)
         stats.collectionRate = charge > 0 ? ((paid / charge) * 100).toFixed(1) : '100.0'
       }
-    } catch { /* 忽略 */ }
+    } catch {}
 
     try {
       const matResult = await materialRecordApi.list({ page: 0, size: 10000 })
       const matList = matResult?.content || []
-      if (matList.length) {
-        let totalFee = 0, totalPaid = 0
-        matList.forEach(r => { totalFee += Number(r.totalFee || 0); totalPaid += Number(r.actualPaid || 0) })
-        matStats.totalFee = totalFee.toFixed(2)
-        matStats.totalPaid = totalPaid.toFixed(2)
-        matStats.collectionRate = totalFee > 0 ? ((totalPaid / totalFee) * 100).toFixed(1) : '100.0'
-      }
-    } catch { /* 忽略 */ }
+      let totalFee = 0
+      let totalPaid = 0
+      matList.forEach(r => {
+        totalFee += Number(r.totalFee || 0)
+        totalPaid += Number(r.actualPaid || 0)
+      })
+      matStats.totalFee = totalFee.toFixed(2)
+      matStats.totalPaid = totalPaid.toFixed(2)
+      matStats.collectionRate = totalFee > 0 ? ((totalPaid / totalFee) * 100).toFixed(1) : '100.0'
+    } catch {}
 
     try {
       const abnormal = await readingApi.getAbnormal({ limit: 20 })
       abnormalReadings.value = abnormal || []
-    } catch { /* 忽略 */ }
+    } catch {}
   } finally {
     statsLoading.value = false
   }
