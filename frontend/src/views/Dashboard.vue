@@ -49,6 +49,35 @@
       <div class="wm-panel-body">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">
           <div>
+            <div style="font-size:16px;font-weight:600;color:var(--wm-text)">村组收缴进度</div>
+            <div class="wm-muted" style="font-size:13px;margin-top:4px">按村展示本月应收、实收、欠费户数、完成率和异常抄表数。</div>
+          </div>
+          <span class="wm-chip">共 {{ villageSummary.length }} 个村组</span>
+        </div>
+        <el-table :data="villageSummary" stripe size="small" max-height="320" border>
+          <el-table-column prop="villageName" label="村组" min-width="120" />
+          <el-table-column label="应收" width="120">
+            <template #default="{ row }">¥{{ Number(row.waterCharge || 0).toFixed(2) }}</template>
+          </el-table-column>
+          <el-table-column label="实收" width="120">
+            <template #default="{ row }">¥{{ Number(row.actualWaterPaid || 0).toFixed(2) }}</template>
+          </el-table-column>
+          <el-table-column prop="unpaidHouseholdCount" label="欠费户数" width="100" />
+          <el-table-column label="完成率" width="150">
+            <template #default="{ row }">
+              <el-progress :percentage="Number(row.collectionRate || 0)" :stroke-width="8" />
+            </template>
+          </el-table-column>
+          <el-table-column prop="abnormalReadingCount" label="异常户数" width="100" />
+        </el-table>
+        <el-empty v-if="!villageSummary.length" description="暂无村组收缴数据" :image-size="72" class="wm-empty" />
+      </div>
+    </section>
+
+    <section class="wm-panel">
+      <div class="wm-panel-body">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">
+          <div>
             <div style="font-size:16px;font-weight:600;color:var(--wm-text)">异常抄表提醒</div>
             <div class="wm-muted" style="font-size:13px;margin-top:4px">这里展示需要人工确认的抄表记录。</div>
           </div>
@@ -86,6 +115,7 @@ const matStats = reactive({
   collectionRate: '0.0'
 })
 const abnormalReadings = ref([])
+const villageSummary = ref([])
 
 onMounted(async () => {
   statsLoading.value = true
@@ -128,6 +158,14 @@ onMounted(async () => {
     try {
       const abnormal = await readingApi.getAbnormal({ limit: 20 })
       abnormalReadings.value = abnormal || []
+    } catch {}
+
+    try {
+      const summary = await reportApi.getVillageCollectionSummary({
+        year: now.getFullYear(),
+        month: now.getMonth() + 1
+      })
+      villageSummary.value = summary || []
     } catch {}
   } finally {
     statsLoading.value = false

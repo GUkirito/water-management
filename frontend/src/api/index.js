@@ -102,13 +102,17 @@ export const reportApi = {
   exportWaterBillReport: (params) => api.get('/reports/water-bill/export', {
     params,
     responseType: 'blob'
-  })
+  }),
+  getVillageCollectionSummary: (params) => api.get('/reports/village-collection-summary', { params })
 }
 
 // ==================== 系统设置 ====================
 export const settingsApi = {
   getInfo: () => api.get('/settings/info'),
-  downloadBackup: () => api.get('/settings/backup/download', { responseType: 'blob' })
+  downloadBackup: () => api.get('/settings/backup/download', { responseType: 'blob' }),
+  restoreBackup: (formData) => api.post('/settings/backup/restore', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
 }
 
 export default api

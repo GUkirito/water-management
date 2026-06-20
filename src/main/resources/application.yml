@@ -49,3 +49,13 @@ water:
   price: 1.8                           # 水价（元/吨），可在系统设置页面修改
   abnormal:
     threshold: 100                     # 异常检测阈值（吨），月用量超过此值标记异常
+
+logging:
+  level:
+    com.example.watermanagement: DEBUG
+  file:
+    name: ${user.home}/.water-management/logs/app.log
+  logback:
+    rollingpolicy:
+      max-file-size: 10MB
+      max-history: 3

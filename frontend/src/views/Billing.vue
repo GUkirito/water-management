@@ -68,9 +68,9 @@
             <div class="wm-muted" style="font-size:12px">已选账单应收合计</div>
             <div style="font-size:22px;font-weight:700;color:var(--wm-warning)">¥{{ totalDue.toFixed(2) }}</div>
           </div>
-          <el-input-number v-model="payAmount" :precision="2" :min="0" style="width:170px" />
-          <div v-if="payAmount > 0 && payAmount >= totalDue" style="color:var(--wm-success)">
-            找零 ¥{{ Math.max(0, payAmount - totalDue).toFixed(2) }}
+          <el-input-number v-model="payAmount" :precision="2" :min="0" :max="totalDue" style="width:170px" />
+          <div v-if="payAmount > 0 && payAmount === totalDue" style="color:var(--wm-success)">
+            足额收款
           </div>
           <div v-if="payAmount > 0 && payAmount < totalDue" style="color:var(--wm-warning)">
             支持部分缴费
@@ -165,6 +165,14 @@ function onSelectBills(rows) {
 async function doPay() {
   if (payAmount.value <= 0) {
     ElMessage.warning('请输入实收金额')
+    return
+  }
+  if (!selectedBills.value.length) {
+    ElMessage.warning('请先勾选要缴费的账单')
+    return
+  }
+  if (payAmount.value > totalDue.value) {
+    ElMessage.warning(`实收金额不能超过欠费总额 ¥${totalDue.value.toFixed(2)}`)
     return
   }
   paying.value = true

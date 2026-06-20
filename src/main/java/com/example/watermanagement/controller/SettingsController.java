@@ -9,8 +9,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -18,8 +21,11 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
-
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -36,20 +42,17 @@ public class SettingsController {
     @Operation(summary = "获取系统设置信息", description = "返回数据库路径等系统信息")
     @GetMapping("/info")
     public ApiResponse<Map<String, String>> getInfo() {
-        String dbPath = datasourceUrl.replace("jdbc:sqlite:", "");
         Map<String, String> info = new HashMap<>();
-        info.put("dbFilePath", dbPath);
+        info.put("dbFilePath", getDbFile().getAbsolutePath());
         return ApiResponse.ok(info);
     }
 
-    @Operation(summary = "下载数据库备份", description = "将当前 SQLite 数据库文件打包下载")
+    @Operation(summary = "下载数据库备份", description = "下载当前 SQLite 数据库文件")
     @GetMapping("/backup/download")
     public void downloadBackup(HttpServletResponse response) throws IOException {
-        String dbPath = datasourceUrl.replace("jdbc:sqlite:", "");
-        File dbFile = new File(dbPath);
-
+        File dbFile = getDbFile();
         if (!dbFile.exists()) {
-            throw new BusinessException("数据库文件不存在: " + dbPath);
+            throw new BusinessException("数据库文件不存在: " + dbFile.getAbsolutePath());
         }
 
         String filename = "backup_" + LocalDate.now() + "_water_meter.db";
@@ -71,6 +74,38 @@ public class SettingsController {
             os.flush();
         }
 
-        log.info("数据库备份下载: {}", filename);
+        log.info("Database backup downloaded: {}", filename);
+    }
+
+    @Operation(summary = "恢复数据库备份", description = "上传 SQLite 数据库文件并替换当前数据库，替换前会自动创建回滚备份")
+    @PostMapping("/backup/restore")
+    public ApiResponse<Map<String, String>> restoreBackup(@RequestParam("file") MultipartFile file) throws IOException {
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException("请选择要恢复的数据库备份文件");
+        }
+
+        File dbFile = getDbFile();
+        File dbDir = dbFile.getParentFile();
+        if (dbDir != null) {
+            dbDir.mkdirs();
+        }
+
+        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+        File rollbackFile = new File(dbDir, "rollback_before_restore_" + timestamp + ".db");
+        if (dbFile.exists()) {
+            Files.copy(dbFile.toPath(), rollbackFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        }
+
+        Files.copy(file.getInputStream(), dbFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+
+        Map<String, String> result = new HashMap<>();
+        result.put("dbFilePath", dbFile.getAbsolutePath());
+        result.put("rollbackFilePath", rollbackFile.getAbsolutePath());
+        log.warn("Database restored from uploaded backup. rollback={}", rollbackFile.getAbsolutePath());
+        return ApiResponse.ok("恢复成功，请重启应用后继续使用", result);
+    }
+
+    private File getDbFile() {
+        return new File(datasourceUrl.replace("jdbc:sqlite:", ""));
     }
 }

@@ -79,6 +79,10 @@ public class PaymentServiceImpl implements PaymentService {
      * 水费合并缴费：按欠费比例分配实收金额到多个月份账单
      */
     private List<Payment> payWaterBills(PaymentRequest request) {
+        if (request.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessException("缴费金额必须大于 0");
+        }
+
         List<WaterBill> bills = waterBillRepository.findAllById(request.getBillIds());
         if (bills.isEmpty()) {
             throw new BusinessException("未找到指定水费账单");
@@ -98,6 +102,10 @@ public class PaymentServiceImpl implements PaymentService {
         BigDecimal totalDue = bills.stream()
                 .map(b -> b.getWaterCharge().subtract(b.getActualWaterPaid()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        if (request.getAmount().compareTo(totalDue) > 0) {
+            throw new BusinessException("实收金额不能超过欠费总额: " + totalDue);
+        }
 
         log.info("水费合并缴费: {} 个月份, 总欠费={}元, 实收={}元",
                 bills.size(), totalDue, request.getAmount());

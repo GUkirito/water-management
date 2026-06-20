@@ -267,6 +267,9 @@ public class MaterialRecordServiceImpl implements MaterialRecordService {
         if ("已收".equals(record.getStatus())) {
             throw new BusinessException("该户材料费已缴清");
         }
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessException("收费金额必须大于 0");
+        }
         BigDecimal unpaid = record.getTotalFee().subtract(record.getActualPaid());
         if (amount.compareTo(unpaid) > 0) {
             throw new BusinessException("实收金额超过欠费金额（" + unpaid + "）");

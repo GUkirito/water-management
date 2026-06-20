@@ -1,5 +1,6 @@
 package com.example.watermanagement.service;
 
+import com.example.watermanagement.dto.VillageCollectionSummaryRow;
 import com.example.watermanagement.dto.WaterBillReportRow;
 import jakarta.servlet.http.HttpServletResponse;
 
@@ -28,4 +29,9 @@ public interface ReportService {
      */
     List<WaterBillReportRow> getWaterBillReportData(int year, int month,
                                                      List<String> villageNames);
+
+    /**
+     * 按村统计指定月份收缴进度。
+     */
+    List<VillageCollectionSummaryRow> getVillageCollectionSummary(int year, int month);
 }
