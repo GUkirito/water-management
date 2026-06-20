@@ -38,7 +38,7 @@ if exist "%~dp0installer" rmdir /s /q "%~dp0installer"
 for %%f in ("%~dp0target\*.jar") do set "JAR_NAME=%%~nxf"
 
 echo   Trying single EXE installer...
-jpackage --type exe --name "VillageWaterManagement" --app-version 1.5.5 --input "%~dp0target" --main-jar "%JAR_NAME%" --main-class org.springframework.boot.loader.launch.JarLauncher --runtime-image "%~dp0target\custom-jre" --java-options "--enable-native-access=ALL-UNNAMED" --win-console --win-shortcut --win-menu --win-dir-chooser --vendor "Village Committee" --description "Water Management System" --dest "%~dp0installer"
+jpackage --type exe --name "VillageWaterManagement" --app-version 1.6.1 --input "%~dp0target" --main-jar "%JAR_NAME%" --main-class org.springframework.boot.loader.launch.JarLauncher --runtime-image "%~dp0target\custom-jre" --java-options "--enable-native-access=ALL-UNNAMED" --win-console --win-shortcut --win-menu --win-dir-chooser --vendor "Village Committee" --description "Water Management System" --dest "%~dp0installer"
 
 if %ERRORLEVEL% EQU 0 (
     echo.
