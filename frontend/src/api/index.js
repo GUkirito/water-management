@@ -75,7 +75,11 @@ export const paymentApi = {
   getHistory: (waterMeterId) =>
     api.get('/payments/history', { params: { waterMeterId } }),
   getAllWaterBills: (waterMeterId) =>
-    api.get('/payments/all-water-bills', { params: { waterMeterId } })
+    api.get('/payments/all-water-bills', { params: { waterMeterId } }),
+  getWaterPrepaymentBalance: (waterMeterId) =>
+    api.get('/payments/water-prepayment-balance', { params: { waterMeterId } }),
+  getWaterPrepaymentLogs: (waterMeterId) =>
+    api.get('/payments/water-prepayment-logs', { params: { waterMeterId } })
 }
 
 // ==================== 材料费管理（独立系统） ====================

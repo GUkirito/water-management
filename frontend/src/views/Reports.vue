@@ -71,6 +71,7 @@
                 <el-tag :type="tagType(row.waterStatus)" size="small">{{ row.waterStatus }}</el-tag>
               </template>
             </el-table-column>
+            <el-table-column prop="note" label="备注" min-width="180" show-overflow-tooltip />
           </el-table>
           <el-empty v-if="!waterData.length && !waterLoading" description="暂无符合条件的水费报表" :image-size="72" class="wm-empty" />
         </div>

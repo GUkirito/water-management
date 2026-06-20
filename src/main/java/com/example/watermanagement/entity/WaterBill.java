@@ -58,6 +58,10 @@ public class WaterBill {
     @Builder.Default
     private String waterStatus = "未收";
 
+    /** 账单备注，如预存抵扣说明 */
+    @Column(length = 500)
+    private String note;
+
     /** 创建时间 */
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

@@ -2,9 +2,11 @@ package com.example.watermanagement.service.impl;
 
 import com.example.watermanagement.dto.PaymentRequest;
 import com.example.watermanagement.entity.Payment;
+import com.example.watermanagement.entity.PrepaymentLog;
 import com.example.watermanagement.entity.WaterBill;
 import com.example.watermanagement.exception.BusinessException;
 import com.example.watermanagement.repository.PaymentRepository;
+import com.example.watermanagement.repository.PrepaymentLogRepository;
 import com.example.watermanagement.repository.WaterBillRepository;
 import com.example.watermanagement.service.PaymentService;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +34,7 @@ public class PaymentServiceImpl implements PaymentService {
 
     private final WaterBillRepository waterBillRepository;
     private final PaymentRepository paymentRepository;
+    private final PrepaymentLogRepository prepaymentLogRepository;
 
     @Override
     public List<WaterBill> getPendingWaterBills(String waterMeterId) {
@@ -73,6 +76,17 @@ public class PaymentServiceImpl implements PaymentService {
         return waterBillRepository.findByWaterMeterId(waterMeterId);
     }
 
+    @Override
+    public BigDecimal getWaterPrepaymentBalance(String waterMeterId) {
+        BigDecimal balance = prepaymentLogRepository.getBalance(waterMeterId);
+        return balance == null ? BigDecimal.ZERO : balance;
+    }
+
+    @Override
+    public List<PrepaymentLog> getWaterPrepaymentLogs(String waterMeterId) {
+        return prepaymentLogRepository.findByWaterMeterIdOrderByCreatedAtDesc(waterMeterId);
+    }
+
     // ==================== 私有方法 ====================
 
     /**
@@ -98,14 +112,16 @@ public class PaymentServiceImpl implements PaymentService {
                         + "（" + bill.getBillYear() + "年" + bill.getBillMonth() + "月）已缴清，请勿重复缴费");
             }
         }
+        String waterMeterId = bills.get(0).getWaterMeterId();
+        boolean hasDifferentMeter = bills.stream()
+                .anyMatch(b -> !waterMeterId.equals(b.getWaterMeterId()));
+        if (hasDifferentMeter) {
+            throw new BusinessException("水费合并缴费只能选择同一户的账单");
+        }
 
         BigDecimal totalDue = bills.stream()
                 .map(b -> b.getWaterCharge().subtract(b.getActualWaterPaid()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        if (request.getAmount().compareTo(totalDue) > 0) {
-            throw new BusinessException("实收金额不能超过欠费总额: " + totalDue);
-        }
 
         log.info("水费合并缴费: {} 个月份, 总欠费={}元, 实收={}元",
                 bills.size(), totalDue, request.getAmount());
@@ -150,6 +166,16 @@ public class PaymentServiceImpl implements PaymentService {
             waterBillRepository.save(bill);
 
             remaining = remaining.subtract(thisPayment);
+        }
+
+        if (remaining.compareTo(BigDecimal.ZERO) > 0) {
+            PrepaymentLog log = PrepaymentLog.builder()
+                    .waterMeterId(waterMeterId)
+                    .amount(remaining)
+                    .type("OVERPAYMENT")
+                    .remark("现金多收转预存 " + remaining.setScale(2, RoundingMode.HALF_UP) + " 元")
+                    .build();
+            prepaymentLogRepository.save(log);
         }
 
         log.info("缴费完成: 共{}笔, 合计{}元", payments.size(),

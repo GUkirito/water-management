@@ -37,4 +37,7 @@ public class WaterBillReportRow {
 
     @ExcelProperty("状态")
     private String waterStatus;
+
+    @ExcelProperty("备注")
+    private String note;
 }

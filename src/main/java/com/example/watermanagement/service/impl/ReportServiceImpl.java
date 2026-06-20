@@ -55,6 +55,7 @@ public class ReportServiceImpl implements ReportService {
                             .waterCharge(b.getWaterCharge())
                             .actualWaterPaid(b.getActualWaterPaid())
                             .waterStatus(b.getWaterStatus())
+                            .note(b.getNote())
                             .build();
                 })
                 .collect(Collectors.toList());

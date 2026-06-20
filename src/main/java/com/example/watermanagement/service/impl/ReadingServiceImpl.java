@@ -4,10 +4,12 @@ import com.example.watermanagement.dto.ReadingBatchItem;
 import com.example.watermanagement.dto.ReadingExportRow;
 import com.example.watermanagement.dto.ReadingRowDTO;
 import com.example.watermanagement.entity.Household;
+import com.example.watermanagement.entity.PrepaymentLog;
 import com.example.watermanagement.entity.Reading;
 import com.example.watermanagement.entity.WaterBill;
 import com.example.watermanagement.exception.BusinessException;
 import com.example.watermanagement.repository.HouseholdRepository;
+import com.example.watermanagement.repository.PrepaymentLogRepository;
 import com.example.watermanagement.repository.ReadingRepository;
 import com.example.watermanagement.repository.WaterBillRepository;
 import com.example.watermanagement.service.ReadingService;
@@ -47,6 +49,7 @@ public class ReadingServiceImpl implements ReadingService {
     private final HouseholdRepository householdRepository;
     private final ReadingRepository readingRepository;
     private final WaterBillRepository waterBillRepository;
+    private final PrepaymentLogRepository prepaymentLogRepository;
     private final EntityManager entityManager;
 
     /** 水价：元/吨，默认 1.8 */
@@ -363,16 +366,19 @@ public class ReadingServiceImpl implements ReadingService {
                         },
                         () -> {
                             // 新建账单
+                            BigDecimal prepaidDeduction = getPrepaidDeduction(waterMeterId, waterCharge);
                             WaterBill bill = WaterBill.builder()
                                     .waterMeterId(waterMeterId)
                                     .billYear(billYear)
                                     .billMonth(billMonth)
                                     .waterAmount(effectiveChargeable)
                                     .waterCharge(waterCharge)
-                                    .actualWaterPaid(BigDecimal.ZERO)
-                                    .waterStatus("未收")
+                                    .actualWaterPaid(prepaidDeduction)
+                                    .waterStatus(calcBillStatus(prepaidDeduction, waterCharge))
+                                    .note(buildPrepaymentNote(prepaidDeduction))
                                     .build();
-                            waterBillRepository.save(bill);
+                            bill = waterBillRepository.save(bill);
+                            savePrepaymentDeduction(waterMeterId, bill, prepaidDeduction);
                         });
 
         return reading;
@@ -400,6 +406,38 @@ public class ReadingServiceImpl implements ReadingService {
         if (paid.compareTo(BigDecimal.ZERO) == 0) return "未收";
         if (paid.compareTo(total) >= 0) return "已收";
         return "部分收";
+    }
+
+    private BigDecimal getPrepaidDeduction(String waterMeterId, BigDecimal waterCharge) {
+        if (waterCharge.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal balance = prepaymentLogRepository.getBalance(waterMeterId);
+        if (balance == null || balance.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO;
+        }
+        return balance.min(waterCharge).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private String buildPrepaymentNote(BigDecimal prepaidDeduction) {
+        if (prepaidDeduction.compareTo(BigDecimal.ZERO) <= 0) {
+            return null;
+        }
+        return "已使用预存抵扣 " + prepaidDeduction.setScale(2, RoundingMode.HALF_UP) + " 元";
+    }
+
+    private void savePrepaymentDeduction(String waterMeterId, WaterBill bill, BigDecimal prepaidDeduction) {
+        if (prepaidDeduction.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+        prepaymentLogRepository.save(PrepaymentLog.builder()
+                .waterMeterId(waterMeterId)
+                .amount(prepaidDeduction.negate())
+                .type("AUTO_DEDUCT")
+                .billId(bill.getId())
+                .remark(bill.getBillYear() + "年" + bill.getBillMonth()
+                        + "月水费自动抵扣预存 " + prepaidDeduction.setScale(2, RoundingMode.HALF_UP) + " 元")
+                .build());
     }
 
     /**

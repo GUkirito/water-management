@@ -3,6 +3,7 @@ package com.example.watermanagement.controller;
 import com.example.watermanagement.dto.ApiResponse;
 import com.example.watermanagement.dto.PaymentRequest;
 import com.example.watermanagement.entity.Payment;
+import com.example.watermanagement.entity.PrepaymentLog;
 import com.example.watermanagement.entity.WaterBill;
 import com.example.watermanagement.service.PaymentService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -12,6 +13,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -55,5 +57,19 @@ public class PaymentController {
     public ApiResponse<List<WaterBill>> getAllWaterBills(
             @Parameter(description = "水表编号") @RequestParam String waterMeterId) {
         return ApiResponse.ok(paymentService.getAllWaterBills(waterMeterId));
+    }
+
+    @Operation(summary = "获取水费预存余额", description = "预存余额仅用于水费，不抵扣材料费")
+    @GetMapping("/water-prepayment-balance")
+    public ApiResponse<BigDecimal> getWaterPrepaymentBalance(
+            @Parameter(description = "水表编号") @RequestParam String waterMeterId) {
+        return ApiResponse.ok(paymentService.getWaterPrepaymentBalance(waterMeterId));
+    }
+
+    @Operation(summary = "获取水费预存流水", description = "查询现金多收转预存、自动抵扣等水费余额变化")
+    @GetMapping("/water-prepayment-logs")
+    public ApiResponse<List<PrepaymentLog>> getWaterPrepaymentLogs(
+            @Parameter(description = "水表编号") @RequestParam String waterMeterId) {
+        return ApiResponse.ok(paymentService.getWaterPrepaymentLogs(waterMeterId));
     }
 }

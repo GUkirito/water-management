@@ -31,9 +31,12 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
           <div>
             <div style="font-size:16px;font-weight:600;color:var(--wm-text)">未缴清账单</div>
-            <div class="wm-muted" style="font-size:13px;margin-top:4px">勾选账单后输入实收金额完成支付。</div>
+            <div class="wm-muted" style="font-size:13px;margin-top:4px">勾选账单后输入实收金额，多收部分自动转为水费预存。</div>
           </div>
-          <span class="wm-chip">共 {{ pendingBills.length }} 笔</span>
+          <div class="wm-table-actions">
+            <span class="wm-chip">水费预存 ¥{{ prepaymentBalance.toFixed(2) }}</span>
+            <span class="wm-chip">共 {{ pendingBills.length }} 笔</span>
+          </div>
         </div>
 
         <el-table :data="pendingBills" border stripe @selection-change="onSelectBills" ref="billTable">
@@ -60,6 +63,7 @@
               </el-tag>
             </template>
           </el-table-column>
+          <el-table-column prop="note" label="备注" min-width="180" show-overflow-tooltip />
         </el-table>
         <el-empty v-if="!pendingBills.length" description="该住户暂无未缴水费" :image-size="72" class="wm-empty" />
 
@@ -68,9 +72,12 @@
             <div class="wm-muted" style="font-size:12px">已选账单应收合计</div>
             <div style="font-size:22px;font-weight:700;color:var(--wm-warning)">¥{{ totalDue.toFixed(2) }}</div>
           </div>
-          <el-input-number v-model="payAmount" :precision="2" :min="0" :max="totalDue" style="width:170px" />
+          <el-input-number v-model="payAmount" :precision="2" :min="0" style="width:170px" />
           <div v-if="payAmount > 0 && payAmount === totalDue" style="color:var(--wm-success)">
             足额收款
+          </div>
+          <div v-if="prepayAmount > 0" style="color:var(--wm-success)">
+            转入预存 ¥{{ prepayAmount.toFixed(2) }}
           </div>
           <div v-if="payAmount > 0 && payAmount < totalDue" style="color:var(--wm-warning)">
             支持部分缴费
@@ -109,6 +116,20 @@
           <el-table-column prop="note" label="备注" min-width="100" show-overflow-tooltip />
         </el-table>
         <el-empty v-if="!historyList.length && !historyLoading" description="暂无缴费记录" :image-size="60" class="wm-empty" />
+        <div style="font-size:15px;font-weight:600;margin:18px 0 10px">水费预存流水</div>
+        <el-table :data="prepaymentLogs" border stripe size="small" max-height="260">
+          <el-table-column label="金额" width="110">
+            <template #default="{ row }">
+              <span :style="{ color: Number(row.amount || 0) >= 0 ? 'var(--wm-success)' : 'var(--wm-warning)', fontWeight: 600 }">
+                {{ Number(row.amount || 0) >= 0 ? '+' : '' }}¥{{ Number(row.amount || 0).toFixed(2) }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="type" label="类型" width="130" />
+          <el-table-column prop="remark" label="备注" min-width="220" show-overflow-tooltip />
+          <el-table-column prop="createdAt" label="时间" width="180" />
+        </el-table>
+        <el-empty v-if="!prepaymentLogs.length && !historyLoading" description="暂无预存流水" :image-size="50" class="wm-empty" />
       </div>
       <template #footer>
         <el-button @click="historyVisible = false">关闭</el-button>
@@ -136,10 +157,13 @@ const historyVisible = ref(false)
 const historyLoading = ref(false)
 const historyList = ref([])
 const billYearMonthMap = ref({})
+const prepaymentBalance = ref(0)
+const prepaymentLogs = ref([])
 
 const totalDue = computed(() =>
   selectedBills.value.reduce((sum, b) => sum + Number(b.waterCharge || 0) - Number(b.actualWaterPaid || 0), 0)
 )
+const prepayAmount = computed(() => Math.max(0, Number(payAmount.value || 0) - totalDue.value))
 
 onMounted(async () => {
   const result = await householdApi.list({ page: 0, size: 10000 })
@@ -150,9 +174,15 @@ async function loadPendingBills() {
   if (!selectedMeter.value) {
     pendingBills.value = []
     selectedBills.value = []
+    prepaymentBalance.value = 0
     return
   }
-  pendingBills.value = await paymentApi.getPendingWater(selectedMeter.value) || []
+  const [bills, balance] = await Promise.all([
+    paymentApi.getPendingWater(selectedMeter.value),
+    paymentApi.getWaterPrepaymentBalance(selectedMeter.value)
+  ])
+  pendingBills.value = bills || []
+  prepaymentBalance.value = Number(balance || 0)
   selectedBills.value = []
   payAmount.value = 0
   billTable.value?.clearSelection()
@@ -171,10 +201,6 @@ async function doPay() {
     ElMessage.warning('请先勾选要缴费的账单')
     return
   }
-  if (payAmount.value > totalDue.value) {
-    ElMessage.warning(`实收金额不能超过欠费总额 ¥${totalDue.value.toFixed(2)}`)
-    return
-  }
   paying.value = true
   try {
     await paymentApi.pay({
@@ -185,7 +211,7 @@ async function doPay() {
       paymentMethod: payMethod.value,
       operator: '管理员'
     })
-    ElMessage.success('收款成功')
+    ElMessage.success(prepayAmount.value > 0 ? `收款成功，转入预存 ¥${prepayAmount.value.toFixed(2)}` : '收款成功')
     payAmount.value = 0
     billTable.value?.clearSelection()
     loadPendingBills()
@@ -200,15 +226,18 @@ async function openHistory() {
   historyLoading.value = true
   historyList.value = []
   billYearMonthMap.value = {}
+  prepaymentLogs.value = []
   try {
-    const [payments, allBills] = await Promise.all([
+    const [payments, allBills, logs] = await Promise.all([
       paymentApi.getHistory(selectedMeter.value),
-      paymentApi.getAllWaterBills?.(selectedMeter.value)
+      paymentApi.getAllWaterBills?.(selectedMeter.value),
+      paymentApi.getWaterPrepaymentLogs(selectedMeter.value)
     ])
     const map = {}
     ;(allBills || []).forEach(b => { map[b.id] = `${b.billYear}年${b.billMonth}月` })
     billYearMonthMap.value = map
     historyList.value = payments || []
+    prepaymentLogs.value = logs || []
   } finally {
     historyLoading.value = false
   }
