@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
  * 村民/水表信息表 — households
  * <p>
  * 每一户对应一条记录，记录户主姓名、联系方式、所在村名、水表编号等基础信息。
- * 删除采用软删除，将 is_active 置为 0 而非物理删除。
+ * 删除采用物理删除，会级联删除关联的抄表记录、水费账单和缴费记录。
  */
 @Data
 @NoArgsConstructor

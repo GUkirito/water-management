@@ -3,6 +3,7 @@ package com.example.watermanagement.controller;
 import com.example.watermanagement.dto.ApiResponse;
 import com.example.watermanagement.dto.HouseholdRequest;
 import com.example.watermanagement.entity.Household;
+import com.example.watermanagement.exception.BusinessException;
 import com.example.watermanagement.service.HouseholdService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -78,11 +79,16 @@ public class HouseholdController {
         return ApiResponse.ok("批量删除成功", null);
     }
 
-    @Operation(summary = "按村名删除该村所有村民")
+    @Operation(summary = "按村组删除（需二次确认）", description = "物理删除指定村组下的所有户")
     @DeleteMapping("/delete-by-village")
-    public ApiResponse<Void> deleteByVillage(@RequestParam String villageName) {
+    public ApiResponse<Void> deleteByVillage(
+            @RequestParam String villageName,
+            @RequestParam(defaultValue = "false") boolean confirm) {
+        if (!confirm) {
+            throw new BusinessException("危险操作：删除整个村组需添加参数 ?confirm=true");
+        }
         householdService.deleteByVillage(villageName);
-        return ApiResponse.ok("已删除村组: " + villageName, null);
+        return ApiResponse.ok("删除成功", null);
     }
 
     @Operation(summary = "批量修改村民的村组名称")

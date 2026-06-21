@@ -38,17 +38,17 @@ public interface HouseholdService {
     Household update(Long id, HouseholdRequest request);
 
     /**
-     * 软删除（将 is_active 置为 false）
+     * 物理删除（会级联删除关联的抄表记录、水费账单和缴费记录）
      */
     void delete(Long id);
 
     /**
-     * 批量软删除
+     * 批量物理删除
      */
     void batchDelete(List<Long> ids);
 
     /**
-     * 按村名软删除该村所有户
+     * 按村名物理删除该村所有户
      */
     void deleteByVillage(String villageName);
 

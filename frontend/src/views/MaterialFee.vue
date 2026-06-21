@@ -79,7 +79,7 @@
     <el-dialog v-model="formVisible" :title="formMode==='create'?'新增材料费':'编辑材料费'" width="520px" :close-on-click-modal="false">
       <el-form :model="form" label-width="110px">
         <el-form-item label="户主姓名" required><el-input v-model="form.householdName" /></el-form-item>
-        <el-form-item label="表号" required><el-input v-model="form.waterMeterId" :disabled="formMode==='edit'" /></el-form-item>
+        <el-form-item label="表号" required><el-input v-model="form.waterMeterId" /></el-form-item>
         <el-form-item label="电话"><el-input v-model="form.phone" /></el-form-item>
         <el-form-item label="村组" required>
           <el-select v-model="form.villageName" filterable allow-create style="width:100%">
@@ -230,6 +230,7 @@ async function saveForm() {
     } else {
       await materialRecordApi.update(form.value.id, {
         householdName: form.value.householdName,
+        waterMeterId: form.value.waterMeterId,
         phone: form.value.phone,
         villageName: form.value.villageName,
         totalFee: form.value.totalFee,

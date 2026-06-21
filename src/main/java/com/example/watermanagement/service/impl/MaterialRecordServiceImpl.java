@@ -79,6 +79,13 @@ public class MaterialRecordServiceImpl implements MaterialRecordService {
     public MaterialRecord update(Long id, MaterialRecordRequest request) {
         MaterialRecord record = getById(id);
         if (request.getHouseholdName() != null) record.setHouseholdName(request.getHouseholdName());
+        if (request.getWaterMeterId() != null) {
+            Optional<MaterialRecord> existing = recordRepository.findByWaterMeterId(request.getWaterMeterId());
+            if (existing.isPresent() && !existing.get().getId().equals(id)) {
+                throw new BusinessException("水表编号已存在: " + request.getWaterMeterId());
+            }
+            record.setWaterMeterId(request.getWaterMeterId());
+        }
         if (request.getPhone() != null) record.setPhone(request.getPhone());
         if (request.getVillageName() != null) record.setVillageName(request.getVillageName());
         if (request.getTotalFee() != null) {

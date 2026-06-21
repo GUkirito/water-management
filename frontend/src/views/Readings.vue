@@ -359,7 +359,7 @@ async function loadTable() {
       waterMeterId: h.waterMeterId,
       householdName: h.householdName,
       phone: h.phone || '',
-      previousReading: 0,
+      previousReading: r?.previousReading ?? 0,
       currentReading: null,
       usageAmount: null,
       chargeableUsage: null,
