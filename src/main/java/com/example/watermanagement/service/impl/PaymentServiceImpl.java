@@ -1,6 +1,7 @@
 package com.example.watermanagement.service.impl;
 
 import com.example.watermanagement.dto.PaymentRequest;
+import com.example.watermanagement.dto.PendingWaterBillRow;
 import com.example.watermanagement.entity.Payment;
 import com.example.watermanagement.entity.PrepaymentLog;
 import com.example.watermanagement.entity.WaterBill;
@@ -40,6 +41,16 @@ public class PaymentServiceImpl implements PaymentService {
     public List<WaterBill> getPendingWaterBills(String waterMeterId) {
         // 返回所有未缴清的水费账单
         return waterBillRepository.findByWaterMeterIdAndWaterStatusNot(waterMeterId, "已收");
+    }
+
+    @Override
+    public List<PendingWaterBillRow> listPendingWaterBills(
+            String villageName, String keyword, Integer billYear, Integer billMonth) {
+        return waterBillRepository.listPendingWaterBills(
+                blankToNull(villageName),
+                blankToNull(keyword),
+                billYear,
+                billMonth);
     }
 
 
@@ -194,5 +205,9 @@ public class PaymentServiceImpl implements PaymentService {
         } else {
             return "部分收";
         }
+    }
+
+    private String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 }

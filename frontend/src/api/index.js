@@ -69,6 +69,8 @@ export const readingApi = {
 
 // ==================== 收费管理 ====================
 export const paymentApi = {
+  listPendingWater: (params) =>
+    api.get('/payments/pending-water-list', { params }),
   getPendingWater: (waterMeterId) =>
     api.get('/payments/pending-water', { params: { waterMeterId } }),
   pay: (data) => api.post('/payments/pay', data),

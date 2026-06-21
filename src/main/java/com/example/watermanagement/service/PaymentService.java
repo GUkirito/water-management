@@ -1,6 +1,7 @@
 package com.example.watermanagement.service;
 
 import com.example.watermanagement.dto.PaymentRequest;
+import com.example.watermanagement.dto.PendingWaterBillRow;
 import com.example.watermanagement.entity.Payment;
 import com.example.watermanagement.entity.PrepaymentLog;
 import com.example.watermanagement.entity.WaterBill;
@@ -17,6 +18,12 @@ public interface PaymentService {
      * 获取指定水表下所有未缴清的水费账单（water_status != '已收'）
      */
     List<WaterBill> getPendingWaterBills(String waterMeterId);
+
+    /**
+     * 查询跨住户未缴清水费账单，供缴费管理页按村组和关键词筛选。
+     */
+    List<PendingWaterBillRow> listPendingWaterBills(
+            String villageName, String keyword, Integer billYear, Integer billMonth);
 
     /**
      * 合并缴费：支持一次缴纳多个月水费

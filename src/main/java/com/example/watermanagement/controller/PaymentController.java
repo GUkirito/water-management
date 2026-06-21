@@ -2,6 +2,7 @@ package com.example.watermanagement.controller;
 
 import com.example.watermanagement.dto.ApiResponse;
 import com.example.watermanagement.dto.PaymentRequest;
+import com.example.watermanagement.dto.PendingWaterBillRow;
 import com.example.watermanagement.entity.Payment;
 import com.example.watermanagement.entity.PrepaymentLog;
 import com.example.watermanagement.entity.WaterBill;
@@ -35,6 +36,17 @@ public class PaymentController {
     public ApiResponse<List<WaterBill>> getPendingWater(
             @Parameter(description = "水表编号") @RequestParam String waterMeterId) {
         return ApiResponse.ok(paymentService.getPendingWaterBills(waterMeterId));
+    }
+
+    @Operation(summary = "获取未缴清水费账单列表",
+            description = "返回所有未缴清水费账单，支持村组、户名/水表号、账单年月筛选")
+    @GetMapping("/pending-water-list")
+    public ApiResponse<List<PendingWaterBillRow>> listPendingWater(
+            @Parameter(description = "村组") @RequestParam(required = false) String villageName,
+            @Parameter(description = "户名或水表编号") @RequestParam(required = false) String keyword,
+            @Parameter(description = "账单年份") @RequestParam(required = false) Integer billYear,
+            @Parameter(description = "账单月份") @RequestParam(required = false) Integer billMonth) {
+        return ApiResponse.ok(paymentService.listPendingWaterBills(villageName, keyword, billYear, billMonth));
     }
 
     @Operation(summary = "缴费",

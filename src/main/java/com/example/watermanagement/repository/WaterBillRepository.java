@@ -2,6 +2,7 @@ package com.example.watermanagement.repository;
 
 import com.example.watermanagement.entity.WaterBill;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -38,4 +39,39 @@ public interface WaterBillRepository extends JpaRepository<WaterBill, Long> {
      * 按状态查询（如：查询所有"未收"账单）
      */
     List<WaterBill> findByWaterStatus(String waterStatus);
+
+    /**
+     * 查询所有未缴清水费账单，并关联活跃住户信息。
+     */
+    @Query("""
+            SELECT new com.example.watermanagement.dto.PendingWaterBillRow(
+                wb.id,
+                wb.waterMeterId,
+                h.householdName,
+                h.villageName,
+                wb.billYear,
+                wb.billMonth,
+                wb.waterAmount,
+                wb.waterCharge,
+                wb.actualWaterPaid,
+                wb.waterCharge - wb.actualWaterPaid,
+                wb.waterStatus,
+                wb.note
+            )
+            FROM WaterBill wb
+            JOIN Household h ON wb.waterMeterId = h.waterMeterId
+            WHERE h.isActive = true
+              AND wb.waterStatus <> '已收'
+              AND (:villageName IS NULL OR h.villageName = :villageName)
+              AND (:keyword IS NULL OR h.householdName LIKE CONCAT('%', :keyword, '%')
+                   OR wb.waterMeterId LIKE CONCAT('%', :keyword, '%'))
+              AND (:billYear IS NULL OR wb.billYear = :billYear)
+              AND (:billMonth IS NULL OR wb.billMonth = :billMonth)
+            ORDER BY wb.billYear DESC, wb.billMonth DESC, h.villageName ASC, h.householdName ASC
+            """)
+    List<com.example.watermanagement.dto.PendingWaterBillRow> listPendingWaterBills(
+            String villageName,
+            String keyword,
+            Integer billYear,
+            Integer billMonth);
 }

@@ -3,9 +3,10 @@
     <section class="wm-page-header">
       <div class="wm-page-title">
         <h1>缴费管理</h1>
-        <p>选择住户后查看未缴账单，支持合并缴费和历史记录查询。</p>
+        <p>从抄表生成的未缴账单中筛选住户，直接进入收款处理。</p>
       </div>
       <div class="wm-table-actions">
+        <span class="wm-chip">抄表账单联动</span>
         <span class="wm-chip">多月合并缴费</span>
       </div>
     </section>
@@ -24,6 +25,76 @@
         <el-radio-button value="water">水费</el-radio-button>
       </el-radio-group>
       <el-button v-if="selectedMeter" link type="primary" @click="openHistory">查看缴费历史</el-button>
+    </section>
+
+    <section class="wm-panel">
+      <div class="wm-panel-body">
+        <div class="wm-billing-list-header">
+          <div>
+            <div style="font-size:16px;font-weight:600;color:var(--wm-text)">未缴水费账单</div>
+            <div class="wm-muted" style="font-size:13px;margin-top:4px">抄表保存后生成的未缴账单会显示在这里，可按村组、户名、表号和月份筛选。</div>
+          </div>
+          <div class="wm-table-actions">
+            <span class="wm-chip">共 {{ pendingBillRows.length }} 笔</span>
+            <span class="wm-chip">欠费 ¥{{ listTotalDue.toFixed(2) }}</span>
+          </div>
+        </div>
+
+        <div class="wm-toolbar wm-toolbar--compact wm-billing-filterbar">
+          <el-select v-model="pendingFilters.villageName" placeholder="全部村组" clearable filterable style="width:160px" @change="loadPendingBillRows">
+            <el-option v-for="v in allVillages" :key="v" :label="v" :value="v" />
+          </el-select>
+          <el-input v-model="pendingFilters.keyword" placeholder="搜索户名/表号" clearable style="width:220px" @keyup.enter="loadPendingBillRows" @clear="loadPendingBillRows" />
+          <el-input-number v-model="pendingFilters.billYear" :min="2000" :max="2100" :controls="false" placeholder="年份" style="width:110px" @change="loadPendingBillRows" />
+          <el-select v-model="pendingFilters.billMonth" placeholder="月份" clearable style="width:110px" @change="loadPendingBillRows">
+            <el-option v-for="m in 12" :key="m" :label="`${m}月`" :value="m" />
+          </el-select>
+          <el-button type="primary" @click="loadPendingBillRows" :loading="pendingListLoading">查询</el-button>
+          <el-button @click="resetPendingFilters">重置</el-button>
+        </div>
+
+        <el-table
+          :data="pendingBillRows"
+          border
+          stripe
+          v-loading="pendingListLoading"
+          class="wm-billing-list-table"
+          @row-dblclick="startPayFromBill"
+        >
+          <el-table-column prop="villageName" label="村组" width="110" show-overflow-tooltip />
+          <el-table-column prop="householdName" label="户主" width="100" />
+          <el-table-column prop="waterMeterId" label="表号" width="130" show-overflow-tooltip />
+          <el-table-column label="账单月份" width="110">
+            <template #default="{ row }">{{ row.billYear }}年{{ row.billMonth }}月</template>
+          </el-table-column>
+          <el-table-column label="用水量" width="100">
+            <template #default="{ row }">{{ Number(row.waterAmount || 0).toFixed(2) }}</template>
+          </el-table-column>
+          <el-table-column label="应收" width="105">
+            <template #default="{ row }">¥{{ Number(row.waterCharge || 0).toFixed(2) }}</template>
+          </el-table-column>
+          <el-table-column label="已收" width="105">
+            <template #default="{ row }">¥{{ Number(row.actualWaterPaid || 0).toFixed(2) }}</template>
+          </el-table-column>
+          <el-table-column label="欠费" width="110">
+            <template #default="{ row }">
+              <span style="color:var(--wm-danger);font-weight:600">¥{{ Number(row.dueAmount || 0).toFixed(2) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="waterStatus" label="状态" width="100">
+            <template #default="{ row }">
+              <el-tag :type="row.waterStatus === '部分收' ? 'warning' : 'danger'" size="small">{{ row.waterStatus }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="note" label="备注" min-width="140" show-overflow-tooltip />
+          <el-table-column label="操作" width="100" fixed="right">
+            <template #default="{ row }">
+              <el-button type="primary" link @click="startPayFromBill(row)">收款</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-if="!pendingBillRows.length && !pendingListLoading" description="暂无符合条件的未缴水费账单" :image-size="72" class="wm-empty" />
+      </div>
     </section>
 
     <section v-if="selectedMeter" class="wm-panel">
@@ -139,11 +210,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { householdApi, paymentApi } from '@/api'
 
 const households = ref([])
+const allVillages = ref([])
 const selectedMeter = ref('')
 const billType = ref('water')
 const pendingBills = ref([])
@@ -159,18 +231,53 @@ const historyList = ref([])
 const billYearMonthMap = ref({})
 const prepaymentBalance = ref(0)
 const prepaymentLogs = ref([])
+const pendingBillRows = ref([])
+const pendingListLoading = ref(false)
+const pendingFilters = reactive({
+  villageName: '',
+  keyword: '',
+  billYear: new Date().getFullYear(),
+  billMonth: null
+})
 
 const totalDue = computed(() =>
   selectedBills.value.reduce((sum, b) => sum + Number(b.waterCharge || 0) - Number(b.actualWaterPaid || 0), 0)
 )
 const prepayAmount = computed(() => Math.max(0, Number(payAmount.value || 0) - totalDue.value))
+const listTotalDue = computed(() =>
+  pendingBillRows.value.reduce((sum, b) => sum + Number(b.dueAmount || 0), 0)
+)
 
 onMounted(async () => {
   const result = await householdApi.list({ page: 0, size: 10000 })
   households.value = result?.content || []
+  allVillages.value = [...new Set(households.value.map(h => h.villageName).filter(Boolean))].sort()
+  loadPendingBillRows()
 })
 
-async function loadPendingBills() {
+async function loadPendingBillRows() {
+  pendingListLoading.value = true
+  try {
+    const params = {}
+    if (pendingFilters.villageName) params.villageName = pendingFilters.villageName
+    if (pendingFilters.keyword?.trim()) params.keyword = pendingFilters.keyword.trim()
+    if (pendingFilters.billYear) params.billYear = pendingFilters.billYear
+    if (pendingFilters.billMonth) params.billMonth = pendingFilters.billMonth
+    pendingBillRows.value = await paymentApi.listPendingWater(params) || []
+  } finally {
+    pendingListLoading.value = false
+  }
+}
+
+function resetPendingFilters() {
+  pendingFilters.villageName = ''
+  pendingFilters.keyword = ''
+  pendingFilters.billYear = new Date().getFullYear()
+  pendingFilters.billMonth = null
+  loadPendingBillRows()
+}
+
+async function loadPendingBills(preselectBillId = null) {
   if (!selectedMeter.value) {
     pendingBills.value = []
     selectedBills.value = []
@@ -186,10 +293,24 @@ async function loadPendingBills() {
   selectedBills.value = []
   payAmount.value = 0
   billTable.value?.clearSelection()
+  if (preselectBillId) {
+    await nextTick()
+    const target = pendingBills.value.find(b => b.id === preselectBillId)
+    if (target) {
+      billTable.value?.toggleRowSelection(target, true)
+      selectedBills.value = [target]
+      payAmount.value = Number(target.waterCharge || 0) - Number(target.actualWaterPaid || 0)
+    }
+  }
 }
 
 function onSelectBills(rows) {
   selectedBills.value = rows
+}
+
+async function startPayFromBill(row) {
+  selectedMeter.value = row.waterMeterId
+  await loadPendingBills(row.id)
 }
 
 async function doPay() {
@@ -214,7 +335,7 @@ async function doPay() {
     ElMessage.success(prepayAmount.value > 0 ? `收款成功，转入预存 ¥${prepayAmount.value.toFixed(2)}` : '收款成功')
     payAmount.value = 0
     billTable.value?.clearSelection()
-    loadPendingBills()
+    await Promise.all([loadPendingBills(), loadPendingBillRows()])
   } finally {
     paying.value = false
   }
@@ -243,3 +364,28 @@ async function openHistory() {
   }
 }
 </script>
+
+<style scoped>
+.wm-billing-list-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.wm-billing-filterbar {
+  margin-bottom: 12px;
+  box-shadow: none;
+}
+
+.wm-billing-list-table {
+  width: 100%;
+}
+
+@media (max-width: 1024px) {
+  .wm-billing-list-header {
+    flex-direction: column;
+  }
+}
+</style>
