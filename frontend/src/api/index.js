@@ -61,7 +61,6 @@ export const readingApi = {
   }),
   singleSave: (params) => api.post('/readings/single', null, { params }),
   getByDate: (params) => api.get('/readings/by-date', { params }),
-  getByMonth: (params) => api.get('/readings/by-month', { params }),
   getAbnormal: (params) => api.get('/readings/abnormal', { params }),
   getConfig: () => api.get('/readings/config'),
   updateConfig: (data) => api.post('/readings/config', data)

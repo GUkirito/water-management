@@ -137,7 +137,7 @@ onMounted(async () => {
         })
         stats.monthlyCharge = charge.toFixed(2)
         stats.monthlyPaid = paid.toFixed(2)
-        stats.collectionRate = charge > 0 ? ((paid / charge) * 100).toFixed(1) : '100.0'
+        stats.collectionRate = charge > 0 ? ((paid / charge) * 100).toFixed(1) : '0.0'
       }
     } catch {}
 
