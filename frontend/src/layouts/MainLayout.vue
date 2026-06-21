@@ -73,7 +73,11 @@
             <span>稳定运行</span>
           </div>
         </div>
-        <router-view />
+        <router-view v-slot="{ Component }">
+          <Transition name="page-fade" mode="out-in">
+            <component :is="Component" />
+          </Transition>
+        </router-view>
       </el-main>
     </el-container>
   </el-container>
@@ -155,7 +159,20 @@ const contentClass = computed(() => ['wm-content', route.path === '/readings' ? 
 }
 
 .wm-menu :deep(.el-menu-item.is-active) {
-  background: rgba(37, 99, 235, 0.22);
+  position: relative;
+  background: rgba(37, 99, 235, 0.1) !important;
+}
+
+.wm-menu :deep(.el-menu-item.is-active)::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 24px;
+  background: #2563eb;
+  border-radius: 0 3px 3px 0;
 }
 
 .wm-menu :deep(.el-menu-item:hover) {
@@ -217,6 +234,21 @@ const contentClass = computed(() => ['wm-content', route.path === '/readings' ? 
 
 .wm-icon-button :deep(.el-icon) {
   font-size: 16px;
+}
+
+.page-fade-enter-active,
+.page-fade-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.page-fade-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.page-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
 @media (max-width: 1024px) {

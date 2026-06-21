@@ -75,7 +75,7 @@
           <el-button size="small" type="danger" @click="batchDeleteHouseholds" :disabled="selectedHouseholdIds.length===0">
             批量删除({{selectedHouseholdIds.length}})
           </el-button>
-          <div style="margin-left:auto" class="wm-chip">已完成 {{ readingDoneCount }} / {{ tableData.length }}</div>
+          <div style="margin-left:auto" class="wm-chip">已完成 {{ completedCount }} / {{ totalCount }}</div>
         </section>
 
         <section v-if="selectedHouseholdIds.length>0" class="wm-toolbar wm-toolbar--compact">
@@ -91,6 +91,20 @@
           <el-checkbox v-model="showMoreColumns" size="small">显示更多列</el-checkbox>
           <el-input v-model="tableKeyword" placeholder="搜索户名/表号" size="small" style="width:200px;margin-left:auto" clearable />
         </section>
+
+        <div class="wm-reading-progress">
+          <div class="wm-reading-progress-text">
+            已完成 <strong>{{ completedCount }}</strong> / {{ totalCount }} 户
+          </div>
+          <el-progress
+            :percentage="progressPercent"
+            :stroke-width="10"
+            :show-text="false"
+            class="wm-reading-progress-bar"
+            color="#2563eb"
+          />
+          <div class="wm-reading-progress-percent">{{ progressPercent }}%</div>
+        </div>
 
         <section class="wm-panel wm-reading-table-panel">
           <div class="wm-table-shell wm-reading-table-shell">
@@ -155,6 +169,14 @@
             </div>
           </div>
         </section>
+
+        <section class="batch-actions">
+          <span class="wm-chip">已完成 {{ completedCount }} / {{ totalCount }}</span>
+          <el-button size="small" type="primary" @click="batchSave" :loading="saving">批量保存</el-button>
+          <el-button size="small" type="danger" @click="batchDeleteHouseholds" :disabled="selectedHouseholdIds.length===0">
+            批量删除({{ selectedHouseholdIds.length }})
+          </el-button>
+        </section>
       </main>
     </div>
   </div>
@@ -172,6 +194,13 @@ const filterKeyword = ref('')
 const waterPrice = ref(1.8)
 const abnormalThreshold = ref(100)
 const readingDoneCount = computed(() => tableData.value.filter(r => r.currentReading && !isNaN(r.currentReading)).length)
+const completedCount = computed(() => {
+  return tableData.value.filter(r => r.currentReading && r.currentReading !== '' && !isNaN(Number(r.currentReading))).length
+})
+const totalCount = computed(() => tableData.value.length)
+const progressPercent = computed(() => {
+  return totalCount.value > 0 ? Math.round((completedCount.value / totalCount.value) * 100) : 0
+})
 const saving = ref(false)
 const showMoreColumns = ref(false)
 const tableKeyword = ref('')
@@ -578,6 +607,52 @@ onBeforeUnmount(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
+}
+
+.wm-reading-progress {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  background: #fff;
+  border: 1px solid #f3f4f6;
+  border-radius: 12px;
+  margin-bottom: 4px;
+}
+
+.wm-reading-progress-text {
+  color: #6b7280;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.wm-reading-progress-text strong {
+  color: #2563eb;
+}
+
+.wm-reading-progress-bar {
+  flex: 1;
+}
+
+.wm-reading-progress-percent {
+  color: #4b5563;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 14px;
+}
+
+.batch-actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid #e2e8f0;
+  padding: 12px 20px;
+  z-index: 10;
 }
 
 .wm-reading-table-shell {
