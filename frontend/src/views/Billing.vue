@@ -93,7 +93,12 @@
             </template>
           </el-table-column>
         </el-table>
-        <el-empty v-if="!pendingBillRows.length && !pendingListLoading" description="暂无符合条件的未缴水费账单" :image-size="72" class="wm-empty" />
+        <el-empty v-if="!pendingBillRows.length && !pendingListLoading" :image-size="72" class="wm-empty">
+          <template #description>
+            <p class="text-gray-500 text-sm">暂无未缴账单</p>
+            <p class="text-gray-400 text-xs mt-1">本月账单均已缴清，或请切换其他户查看</p>
+          </template>
+        </el-empty>
       </div>
     </section>
 

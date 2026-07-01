@@ -1,0 +1,344 @@
+:root {
+  --wm-bg: #f5f7fb;
+  --wm-surface: #ffffff;
+  --wm-surface-2: #f8fafc;
+  --wm-border: #e5e7eb;
+  --wm-text: #0f172a;
+  --wm-text-2: #475569;
+  --wm-text-3: #94a3b8;
+  --wm-primary: #0284C7;
+  --wm-primary-strong: #0369a1;
+  --wm-primary-light: #f0f9ff;
+  --wm-success: #16a34a;
+  --wm-warning: #d97706;
+  --wm-danger: #dc2626;
+  --wm-radius: 12px;
+  --wm-radius-sm: 10px;
+  --wm-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+  --wm-shadow-soft: 0 6px 18px rgba(15, 23, 42, 0.05);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+html, body, #app {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
+  background: var(--wm-bg);
+  color: var(--wm-text);
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: inherit;
+}
+
+.wm-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.wm-page-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.wm-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  background: var(--wm-surface);
+  border: 1px solid var(--wm-border);
+  border-radius: var(--wm-radius);
+  box-shadow: var(--wm-shadow-soft);
+}
+
+.wm-page-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.wm-page-title h1 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.3;
+  color: var(--wm-text);
+}
+
+.wm-page-title p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--wm-text-2);
+}
+
+.wm-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--wm-surface);
+  border: 1px solid var(--wm-border);
+  border-radius: var(--wm-radius);
+  box-shadow: var(--wm-shadow-soft);
+}
+
+.wm-toolbar--compact {
+  padding: 12px 14px;
+}
+
+.wm-panel {
+  background: var(--wm-surface);
+  border: 1px solid var(--wm-border);
+  border-radius: var(--wm-radius);
+  box-shadow: var(--wm-shadow-soft);
+}
+
+.wm-panel + .wm-panel {
+  margin-top: 0;
+}
+
+.wm-panel-body {
+  padding: 16px;
+}
+
+.wm-card-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.wm-stat-card {
+  padding: 18px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  border: 1px solid var(--wm-border);
+  border-radius: var(--wm-radius);
+  box-shadow: var(--wm-shadow-soft);
+  min-height: 120px;
+}
+
+.wm-stat-label {
+  font-size: 13px;
+  color: var(--wm-text-2);
+  margin-bottom: 10px;
+}
+
+.wm-stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--wm-text);
+}
+
+.wm-stat-value.is-primary {
+  color: var(--wm-primary);
+}
+
+.wm-stat-value.is-success {
+  color: var(--wm-success);
+}
+
+.wm-stat-value.is-warning {
+  color: var(--wm-warning);
+}
+
+.wm-stat-value.is-danger {
+  color: var(--wm-danger);
+}
+
+.wm-table-shell {
+  padding: 0;
+  overflow: hidden;
+}
+
+.wm-table-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.wm-empty {
+  padding: 48px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+}
+
+.wm-muted {
+  color: var(--wm-text-2);
+}
+
+.wm-divider {
+  height: 1px;
+  background: var(--wm-border);
+  margin: 12px 0;
+}
+
+.wm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--wm-border);
+  background: var(--wm-surface-2);
+  color: var(--wm-text-2);
+  font-size: 12px;
+}
+
+.row-abnormal {
+  --el-table-tr-bg-color: #fff7ed;
+}
+
+.el-button,
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner,
+.el-tag {
+  transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.el-button {
+  border-radius: 10px;
+}
+
+.el-button--primary {
+  --el-button-bg-color: var(--wm-primary);
+  --el-button-border-color: var(--wm-primary);
+  --el-button-hover-bg-color: var(--wm-primary-strong);
+  --el-button-hover-border-color: var(--wm-primary-strong);
+}
+
+.el-button:hover {
+  transform: translateY(-1px);
+}
+
+.el-card {
+  border-radius: var(--wm-radius);
+}
+
+.el-dialog {
+  border-radius: var(--wm-radius);
+}
+
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner {
+  border-radius: 10px;
+}
+
+.el-button:focus-visible,
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focused,
+.el-textarea__inner:focus {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.el-table {
+  --el-table-border-color: var(--wm-border);
+  --el-table-header-bg-color: #f8fafc;
+  --el-table-row-hover-bg-color: #f8fbff;
+  --el-table-header-text-color: #334155;
+  --el-table-text-color: var(--wm-text);
+}
+
+body .el-table td.el-table__cell,
+body .el-table th.el-table__cell {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+body .el-table .cell {
+  line-height: 1.45;
+}
+
+body .el-pagination {
+  --el-pagination-font-size: 13px;
+}
+
+@media (max-width: 1200px) {
+  .wm-page-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .wm-card-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+}
+
+@media (max-width: 1024px) {
+  .wm-page-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .wm-toolbar {
+    align-items: stretch;
+  }
+
+  .wm-toolbar > * {
+    width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .wm-page {
+    gap: 14px;
+  }
+
+  .wm-page-header,
+  .wm-toolbar,
+  .wm-panel-body {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .wm-stat-card {
+    min-height: 108px;
+  }
+
+  .wm-stat-value {
+    font-size: 24px;
+  }
+}
+
+/* 表格行悬停效果加强 */
+.el-table .el-table__body tr:hover > td {
+  background-color: #f1f5f9 !important;
+  cursor: pointer;
+}
+
+.el-table .el-table__body tr.current-row > td {
+  background-color: var(--wm-primary-light) !important;
+}
+
+/* 按钮按下反馈 */
+.el-button:not(.is-disabled):active {
+  transform: scale(0.97);
+}
+
+/* 统计卡片点击反馈 */
+.wm-stat-card:active {
+  transform: scale(0.98);
+  transition: transform 0.1s ease;
+}

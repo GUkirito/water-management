@@ -73,7 +73,12 @@
             </el-table-column>
             <el-table-column prop="note" label="备注" min-width="180" show-overflow-tooltip />
           </el-table>
-          <el-empty v-if="!waterData.length && !waterLoading" description="暂无符合条件的水费报表" :image-size="72" class="wm-empty" />
+          <el-empty v-if="!waterData.length && !waterLoading" :image-size="72" class="wm-empty">
+            <template #description>
+              <p class="text-gray-500 text-sm">暂无符合条件的水费报表</p>
+              <p class="text-gray-400 text-xs mt-1">请选择月份后查看报表数据</p>
+            </template>
+          </el-empty>
         </div>
 
         <!-- ============ 材料费统计 ============ -->
@@ -139,7 +144,12 @@
               </template>
             </el-table-column>
           </el-table>
-          <el-empty v-if="!materialData.length && !matLoading" description="暂无符合条件的材料费统计" :image-size="72" class="wm-empty" />
+          <el-empty v-if="!materialData.length && !matLoading" :image-size="72" class="wm-empty">
+            <template #description>
+              <p class="text-gray-500 text-sm">暂无符合条件的材料费统计</p>
+              <p class="text-gray-400 text-xs mt-1">请筛选日期和村组后查看统计数据</p>
+            </template>
+          </el-empty>
         </div>
       </div>
     </section>

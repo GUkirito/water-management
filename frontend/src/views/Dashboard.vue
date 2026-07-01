@@ -84,7 +84,12 @@
           </el-table-column>
           <el-table-column prop="abnormalReadingCount" label="异常户数" width="100" />
         </el-table>
-        <el-empty v-if="!villageSummary.length" description="暂无村组收缴数据" :image-size="72" class="wm-empty" />
+        <el-empty v-if="!villageSummary.length" :image-size="72" class="wm-empty">
+          <template #description>
+            <p class="text-gray-500 text-sm">暂无村组收缴数据</p>
+            <p class="text-gray-400 text-xs mt-1">请先在「抄表录入」中添加抄表记录</p>
+          </template>
+        </el-empty>
       </div>
     </section>
 
@@ -110,7 +115,12 @@
           <el-table-column prop="villageName" label="村名" width="120" />
           <el-table-column prop="abnormalReason" label="异常原因" min-width="220" show-overflow-tooltip />
         </el-table>
-        <el-empty v-if="!abnormalReadings.length" description="暂无异常记录" :image-size="72" class="wm-empty" />
+        <el-empty v-if="!abnormalReadings.length" :image-size="72" class="wm-empty">
+          <template #description>
+            <p class="text-gray-500 text-sm">暂无异常记录</p>
+            <p class="text-gray-400 text-xs mt-1">暂无统计数据</p>
+          </template>
+        </el-empty>
       </div>
     </section>
   </div>
