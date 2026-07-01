@@ -123,20 +123,20 @@
               @selection-change="onSelectionChange"
             >
               <el-table-column type="selection" width="42" />
-              <el-table-column type="index" label="#" width="48" />
-              <el-table-column prop="householdName" label="户主" width="90" />
+              <el-table-column type="index" label="序号" fixed="left" width="60" />
+              <el-table-column prop="householdName" label="户主" width="120" />
               <el-table-column prop="waterMeterId" label="表号" width="120" />
               <el-table-column prop="previousReading" label="上次表底" width="90" />
-              <el-table-column label="本次表底" width="140">
+              <el-table-column label="本次表底" align="right" width="140">
                 <template #default="{ row }">
                   <el-input v-model="row.currentReading" placeholder="输入" size="small" @change="calcRow(row)" :class="{ 'is-error': row.isAbnormal }" />
                 </template>
               </el-table-column>
-              <el-table-column label="用水量" width="90">
-                <template #default="{ row }">{{ row.usageAmount != null ? row.usageAmount : '-' }}</template>
+              <el-table-column label="用水量" align="right" width="100">
+                <template #default="{ row }"><span class="font-mono">{{ row.usageAmount != null ? row.usageAmount : '-' }}</span></template>
               </el-table-column>
-              <el-table-column label="水费" width="90">
-                <template #default="{ row }">{{ row.waterCharge != null ? row.waterCharge : '-' }}</template>
+              <el-table-column label="水费" align="right" width="100">
+                <template #default="{ row }"><span class="font-mono">{{ row.waterCharge != null ? row.waterCharge : '-' }}</span></template>
               </el-table-column>
               <el-table-column label="状态" width="78">
                 <template #default="{ row }">
@@ -184,7 +184,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, computed, nextTick, onBeforeUnmount, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
 import { householdApi, readingApi } from '@/api'
 
 const readingDate = ref(new Date().toISOString().slice(0, 10))
@@ -424,8 +424,14 @@ async function batchDeleteHouseholds() {
     return
   }
   try {
+    const deletedCount = selectedHouseholdIds.value.length
     await householdApi.batchDelete(selectedHouseholdIds.value)
-    ElMessage.success('已删除')
+    ElNotification({
+      title: '删除成功',
+      message: `已删除 ${deletedCount} 条记录`,
+      type: 'success',
+      duration: 3000
+    })
     selectedHouseholdIds.value = []
     loadTable()
     loadHouseholdList()
@@ -522,7 +528,13 @@ async function batchSave() {
   saving.value = true
   try {
     const r = await readingApi.batchSave(items, readingDate.value)
-    ElMessage.success(`保存完成：成功 ${r.total} 条`)
+    const savedCount = r?.total || items.length
+    ElNotification({
+      title: '保存成功',
+      message: `共更新 ${savedCount} 条抄表记录`,
+      type: 'success',
+      duration: 3000
+    })
     loadTable()
   } catch {} finally {
     saving.value = false

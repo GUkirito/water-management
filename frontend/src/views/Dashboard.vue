@@ -1,5 +1,5 @@
 <template>
-  <div class="wm-page" v-loading="statsLoading" element-loading-text="正在加载概览...">
+  <div class="wm-page">
     <section class="wm-page-header">
       <div class="wm-page-title">
         <h1>仪表盘</h1>
@@ -11,118 +11,132 @@
       </div>
     </section>
 
-    <section class="wm-stat-card wm-rate-overview">
-      <div class="wm-rate-overview-content">
-        <div class="wm-rate-group">
-          <div>
-            <div class="wm-stat-label">水费收缴率</div>
-            <div class="wm-stat-value wm-stat-value--compact" :class="waterRateColor">{{ waterRate }}%</div>
-          </div>
-          <div class="wm-rate-divider">|</div>
-          <div>
-            <div class="wm-stat-label">材料费收缴率</div>
-            <div class="wm-stat-value wm-stat-value--compact" :class="materialRateColor">{{ materialRate }}%</div>
-          </div>
+    <template v-if="statsLoading">
+      <div class="skeleton dashboard-skeleton-rate" />
+      <section class="stats-grid">
+        <div class="skeleton dashboard-skeleton-card" />
+        <div class="sub-grid">
+          <div v-for="i in 4" :key="i" class="skeleton dashboard-skeleton-card" />
         </div>
-        <div class="wm-rate-total">
-          <div class="wm-stat-label">综合收缴率</div>
-          <div class="wm-stat-value wm-stat-value--large" :class="overallRateColor">{{ overallCollectionRate }}%</div>
-        </div>
-      </div>
-    </section>
+      </section>
+      <div class="skeleton dashboard-skeleton-table" />
+      <div class="skeleton dashboard-skeleton-table" />
+    </template>
 
-    <section class="stats-grid">
-      <div class="wm-stat-card">
-        <div class="wm-stat-label">村庄概况</div>
-        <div class="wm-stat-meta">总户数</div>
-        <div class="wm-stat-value is-primary">{{ stats.totalHouseholds }}</div>
-        <div class="wm-stat-meta wm-stat-meta--spaced">本月用水总量</div>
-        <div class="wm-stat-value wm-stat-value--compact">{{ stats.monthlyUsage }}</div>
-      </div>
-      <div class="sub-grid">
-        <div class="wm-stat-card">
-          <div class="wm-stat-label">水费应收</div>
-          <div class="wm-stat-value is-warning">¥{{ stats.monthlyCharge }}</div>
-        </div>
-        <div class="wm-stat-card">
-          <div class="wm-stat-label">水费实收</div>
-          <div class="wm-stat-value is-success">¥{{ stats.monthlyPaid }}</div>
-        </div>
-        <div class="wm-stat-card">
-          <div class="wm-stat-label">材料费应收</div>
-          <div class="wm-stat-value is-warning">¥{{ matStats.totalFee }}</div>
-        </div>
-        <div class="wm-stat-card">
-          <div class="wm-stat-label">材料费实收</div>
-          <div class="wm-stat-value is-success">¥{{ matStats.totalPaid }}</div>
-        </div>
-      </div>
-    </section>
-
-    <section class="wm-panel">
-      <div class="wm-panel-body">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">
-          <div>
-            <div style="font-size:16px;font-weight:600;color:var(--wm-text)">村组收缴进度</div>
-            <div class="wm-muted" style="font-size:13px;margin-top:4px">按村展示本月应收、实收、欠费户数、完成率和异常抄表数。</div>
-          </div>
-          <span class="wm-chip">共 {{ villageSummary.length }} 个村组</span>
-        </div>
-        <el-table :data="villageSummary" stripe size="small" max-height="320" border>
-          <el-table-column prop="villageName" label="村组" min-width="120" />
-          <el-table-column label="应收" width="120">
-            <template #default="{ row }">¥{{ Number(row.waterCharge || 0).toFixed(2) }}</template>
-          </el-table-column>
-          <el-table-column label="实收" width="120">
-            <template #default="{ row }">¥{{ Number(row.actualWaterPaid || 0).toFixed(2) }}</template>
-          </el-table-column>
-          <el-table-column prop="unpaidHouseholdCount" label="欠费户数" width="100" />
-          <el-table-column label="完成率" width="150">
-            <template #default="{ row }">
-              <el-progress :percentage="Number(row.collectionRate || 0)" :stroke-width="8" />
-            </template>
-          </el-table-column>
-          <el-table-column prop="abnormalReadingCount" label="异常户数" width="100" />
-        </el-table>
-        <el-empty v-if="!villageSummary.length" :image-size="72" class="wm-empty">
-          <template #description>
-            <p class="text-gray-500 text-sm">暂无村组收缴数据</p>
-            <p class="text-gray-400 text-xs mt-1">请先在「抄表录入」中添加抄表记录</p>
-          </template>
-        </el-empty>
-      </div>
-    </section>
-
-    <section class="wm-panel">
-      <div class="wm-panel-body">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">
-          <div>
-            <div style="font-size:16px;font-weight:600;color:var(--wm-text);display:flex;align-items:center">
-              异常抄表提醒
-              <el-tag size="small" type="danger" effect="dark" class="ml-2">
-                {{ abnormalReadings.length }}
-              </el-tag>
+    <template v-else>
+      <section class="wm-stat-card wm-rate-overview">
+        <div class="wm-rate-overview-content">
+          <div class="wm-rate-group">
+            <div>
+              <div class="wm-stat-label">水费收缴率</div>
+              <div class="wm-stat-value wm-stat-value--compact" :class="waterRateColor">{{ waterRate }}%</div>
             </div>
-            <div class="wm-muted" style="font-size:13px;margin-top:4px">这里展示需要人工确认的抄表记录。</div>
+            <div class="wm-rate-divider">|</div>
+            <div>
+              <div class="wm-stat-label">材料费收缴率</div>
+              <div class="wm-stat-value wm-stat-value--compact" :class="materialRateColor">{{ materialRate }}%</div>
+            </div>
           </div>
-          <span class="wm-chip">共 {{ abnormalReadings.length }} 条</span>
+          <div class="wm-rate-total">
+            <div class="wm-stat-label">综合收缴率</div>
+            <div class="wm-stat-value wm-stat-value--large" :class="overallRateColor">{{ overallCollectionRate }}%</div>
+          </div>
         </div>
-        <el-table :data="abnormalReadings" stripe size="small" max-height="350" border>
-          <el-table-column prop="readingDate" label="日期" width="120">
-            <template #default="{ row }">{{ row.readingDate?.slice(0, 10) }}</template>
-          </el-table-column>
-          <el-table-column prop="householdName" label="户名" width="120" />
-          <el-table-column prop="villageName" label="村名" width="120" />
-          <el-table-column prop="abnormalReason" label="异常原因" min-width="220" show-overflow-tooltip />
-        </el-table>
-        <el-empty v-if="!abnormalReadings.length" :image-size="72" class="wm-empty">
-          <template #description>
-            <p class="text-gray-500 text-sm">暂无异常记录</p>
-            <p class="text-gray-400 text-xs mt-1">暂无统计数据</p>
-          </template>
-        </el-empty>
-      </div>
-    </section>
+      </section>
+
+      <section class="stats-grid">
+        <div class="wm-stat-card">
+          <div class="wm-stat-label">村庄概况</div>
+          <div class="wm-stat-meta">总户数</div>
+          <div class="wm-stat-value is-primary">{{ stats.totalHouseholds }}</div>
+          <div class="wm-stat-meta wm-stat-meta--spaced">本月用水总量</div>
+          <div class="wm-stat-value wm-stat-value--compact">{{ stats.monthlyUsage }}</div>
+        </div>
+        <div class="sub-grid">
+          <div class="wm-stat-card">
+            <div class="wm-stat-label">水费应收</div>
+            <div class="wm-stat-value is-warning">¥{{ stats.monthlyCharge }}</div>
+          </div>
+          <div class="wm-stat-card">
+            <div class="wm-stat-label">水费实收</div>
+            <div class="wm-stat-value is-success">¥{{ stats.monthlyPaid }}</div>
+          </div>
+          <div class="wm-stat-card">
+            <div class="wm-stat-label">材料费应收</div>
+            <div class="wm-stat-value is-warning">¥{{ matStats.totalFee }}</div>
+          </div>
+          <div class="wm-stat-card">
+            <div class="wm-stat-label">材料费实收</div>
+            <div class="wm-stat-value is-success">¥{{ matStats.totalPaid }}</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="wm-panel">
+        <div class="wm-panel-body">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">
+            <div>
+              <div style="font-size:16px;font-weight:600;color:var(--wm-text)">村组收缴进度</div>
+              <div class="wm-muted" style="font-size:13px;margin-top:4px">按村展示本月应收、实收、欠费户数、完成率和异常抄表数。</div>
+            </div>
+            <span class="wm-chip">共 {{ villageSummary.length }} 个村组</span>
+          </div>
+          <el-table :data="villageSummary" stripe size="small" max-height="320" border>
+            <el-table-column prop="villageName" label="村组" min-width="120" />
+            <el-table-column label="应收" width="120">
+              <template #default="{ row }">¥{{ Number(row.waterCharge || 0).toFixed(2) }}</template>
+            </el-table-column>
+            <el-table-column label="实收" width="120">
+              <template #default="{ row }">¥{{ Number(row.actualWaterPaid || 0).toFixed(2) }}</template>
+            </el-table-column>
+            <el-table-column prop="unpaidHouseholdCount" label="欠费户数" width="100" />
+            <el-table-column label="完成率" width="150">
+              <template #default="{ row }">
+                <el-progress :percentage="Number(row.collectionRate || 0)" :stroke-width="8" />
+              </template>
+            </el-table-column>
+            <el-table-column prop="abnormalReadingCount" label="异常户数" width="100" />
+          </el-table>
+          <el-empty v-if="!villageSummary.length" :image-size="72" class="wm-empty">
+            <template #description>
+              <p class="text-gray-500 text-sm">暂无村组收缴数据</p>
+              <p class="text-gray-400 text-xs mt-1">请先在「抄表录入」中添加抄表记录</p>
+            </template>
+          </el-empty>
+        </div>
+      </section>
+
+      <section class="wm-panel">
+        <div class="wm-panel-body">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">
+            <div>
+              <div style="font-size:16px;font-weight:600;color:var(--wm-text);display:flex;align-items:center">
+                异常抄表提醒
+                <el-tag size="small" type="danger" effect="dark" class="ml-2">
+                  {{ abnormalReadings.length }}
+                </el-tag>
+              </div>
+              <div class="wm-muted" style="font-size:13px;margin-top:4px">这里展示需要人工确认的抄表记录。</div>
+            </div>
+            <span class="wm-chip">共 {{ abnormalReadings.length }} 条</span>
+          </div>
+          <el-table :data="abnormalReadings" stripe size="small" max-height="350" border>
+            <el-table-column prop="readingDate" label="日期" width="120">
+              <template #default="{ row }">{{ row.readingDate?.slice(0, 10) }}</template>
+            </el-table-column>
+            <el-table-column prop="householdName" label="户名" width="120" />
+            <el-table-column prop="villageName" label="村名" width="120" />
+            <el-table-column prop="abnormalReason" label="异常原因" min-width="220" show-overflow-tooltip />
+          </el-table>
+          <el-empty v-if="!abnormalReadings.length" :image-size="72" class="wm-empty">
+            <template #description>
+              <p class="text-gray-500 text-sm">暂无异常记录</p>
+              <p class="text-gray-400 text-xs mt-1">暂无统计数据</p>
+            </template>
+          </el-empty>
+        </div>
+      </section>
+    </template>
   </div>
 </template>
 
@@ -130,7 +144,7 @@
 import { reactive, ref, onMounted, computed } from 'vue'
 import { householdApi, reportApi, readingApi, materialRecordApi } from '@/api'
 
-const statsLoading = ref(false)
+const statsLoading = ref(true)
 const currentMonthLabel = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' })
 const stats = reactive({
   totalHouseholds: 0,
@@ -279,6 +293,18 @@ onMounted(async () => {
 
 .wm-stat-value--large {
   font-size: 32px;
+}
+
+.dashboard-skeleton-rate {
+  min-height: 112px;
+}
+
+.dashboard-skeleton-card {
+  min-height: 120px;
+}
+
+.dashboard-skeleton-table {
+  min-height: 240px;
 }
 
 .text-emerald-600 {

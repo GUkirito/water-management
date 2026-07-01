@@ -44,6 +44,10 @@
           <template #title>系统设置</template>
         </el-menu-item>
       </el-menu>
+
+      <div class="wm-sidebar-version">
+        <span>v1.6.7</span>
+      </div>
     </el-aside>
 
     <el-container class="wm-main">
@@ -102,6 +106,7 @@ const contentClass = computed(() => ['wm-content', route.path === '/readings' ? 
 }
 
 .wm-sidebar {
+  position: relative;
   display: flex;
   flex-direction: column;
   background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
@@ -149,6 +154,22 @@ const contentClass = computed(() => ['wm-content', route.path === '/readings' ? 
 .wm-menu {
   border-right: none;
   padding: 12px 10px;
+  padding-bottom: 50px;
+}
+
+.wm-sidebar-version {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 12px;
+  text-align: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.wm-sidebar-version span {
+  color: #94a3b8;
+  font-size: 12px;
 }
 
 .wm-menu :deep(.el-menu-item) {
@@ -263,6 +284,10 @@ const contentClass = computed(() => ['wm-content', route.path === '/readings' ? 
     align-items: center;
     overflow-x: auto;
     overflow-y: hidden;
+  }
+
+  .wm-sidebar-version {
+    display: none;
   }
 
   .wm-brand {
