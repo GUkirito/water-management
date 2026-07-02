@@ -1,15 +1,5 @@
 <template>
   <div class="wm-page wm-readings-page">
-    <section class="wm-page-header wm-page-header--compact">
-      <div class="wm-page-title">
-        <h1>抄表录入</h1>
-        <p>按村管理住户抄表数据，支持批量录入、导入和异常提醒。</p>
-      </div>
-      <div class="wm-table-actions">
-        <span class="wm-chip">抄表进度 {{ readingDoneCount }} / {{ tableData.length }}</span>
-      </div>
-    </section>
-
     <div class="wm-reading-workspace">
       <aside class="wm-panel wm-reading-sidebar">
         <div class="wm-panel-body wm-page-shell">
@@ -58,53 +48,37 @@
       </aside>
 
       <main class="wm-page-shell wm-reading-main">
-        <section class="wm-toolbar">
-          <span style="font-weight:600;color:var(--wm-text)">抄表日期</span>
-          <el-date-picker v-model="readingDate" type="date" placeholder="选择日期" value-format="YYYY-MM-DD" @change="loadTable" style="width:160px" size="small" />
-          <el-button size="small" @click="exportTemplate">导出空白模板</el-button>
-          <el-dropdown trigger="click" @command="handleImportCommand">
-            <el-button size="small" type="warning">导入模板</el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="readings">导入抄表数据</el-dropdown-item>
-                <el-dropdown-item command="register">导入住户信息</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-          <el-button size="small" type="primary" @click="batchSave" :loading="saving">批量保存</el-button>
-          <el-button size="small" type="danger" @click="batchDeleteHouseholds" :disabled="selectedHouseholdIds.length===0">
-            批量删除({{selectedHouseholdIds.length}})
-          </el-button>
-          <div style="margin-left:auto" class="wm-chip">已完成 {{ completedCount }} / {{ totalCount }}</div>
-        </section>
-
-        <section v-if="selectedHouseholdIds.length>0" class="wm-toolbar wm-toolbar--compact">
-          <span class="wm-chip">已选 {{ selectedHouseholdIds.length }} 户</span>
-          <span style="font-size:13px;color:var(--wm-text-2)">批量改村组</span>
-          <el-select v-model="batchVillage" placeholder="选择村组" size="small" style="width:160px" filterable allow-create>
-            <el-option v-for="v in allVillages" :key="v" :label="v" :value="v" />
-          </el-select>
-          <el-button size="small" type="primary" @click="applyBatchVillage" :disabled="!batchVillage">应用</el-button>
-        </section>
-
-        <section class="wm-toolbar wm-toolbar--compact">
-          <el-checkbox v-model="showMoreColumns" size="small">显示更多列</el-checkbox>
-          <el-input v-model="tableKeyword" placeholder="搜索户名/表号" size="small" style="width:200px;margin-left:auto" clearable />
-        </section>
-
-        <div class="wm-reading-progress">
-          <div class="wm-reading-progress-text">
-            已完成 <strong>{{ completedCount }}</strong> / {{ totalCount }} 户
+        <section class="wm-toolbar wm-reading-toolbar">
+          <div class="wm-toolbar-group">
+            <span class="wm-toolbar-label">抄表日期</span>
+            <el-date-picker v-model="readingDate" type="date" placeholder="选择日期" value-format="YYYY-MM-DD" @change="loadTable" style="width:160px" size="small" />
           </div>
-          <el-progress
-            :percentage="progressPercent"
-            :stroke-width="10"
-            :show-text="false"
-            class="wm-reading-progress-bar"
-            color="#2563eb"
-          />
-          <div class="wm-reading-progress-percent">{{ progressPercent }}%</div>
-        </div>
+          <div class="wm-toolbar-group wm-reading-progress-inline">
+            <span>已完成 <strong>{{ completedCount }}</strong> / {{ totalCount }}</span>
+            <el-progress
+              :percentage="progressPercent"
+              :stroke-width="6"
+              :show-text="false"
+              class="wm-reading-progress-bar"
+              color="#0284C7"
+            />
+            <span class="font-mono">{{ progressPercent }}%</span>
+          </div>
+          <div class="wm-toolbar-group">
+            <el-button size="small" @click="exportTemplate">导出空白模板</el-button>
+            <el-dropdown trigger="click" @command="handleImportCommand">
+              <el-button size="small" type="warning">导入模板</el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="readings">导入抄表数据</el-dropdown-item>
+                  <el-dropdown-item command="register">导入住户信息</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+          <div class="wm-toolbar-spacer"></div>
+          <el-input v-model="tableKeyword" placeholder="搜索户名/表号" size="small" class="wm-reading-search" clearable />
+        </section>
 
         <section class="wm-panel wm-reading-table-panel">
           <div class="wm-table-shell wm-reading-table-shell">
@@ -115,7 +89,7 @@
               stripe
               style="width:100%"
               :height="tableHeight"
-              :style="{ minWidth: showMoreColumns ? '1380px' : '1060px' }"
+              :style="{ minWidth: '1320px' }"
               :row-class-name="rowClassName"
               @row-click="onRowClick"
               highlight-current-row
@@ -145,21 +119,21 @@
                   <el-tag v-else type="info" size="small">-</el-tag>
                 </template>
               </el-table-column>
-              <el-table-column v-if="showMoreColumns" prop="phone" label="电话" width="120" />
-              <el-table-column v-if="showMoreColumns" label="计费用水量" width="120">
+              <el-table-column prop="phone" label="电话" width="120" />
+              <el-table-column label="计费用水量" width="120">
                 <template #default="{ row }">
                   <el-input-number v-model="row.chargeableUsage" :precision="2" :min="0" size="small" controls-position="right" style="width:100px" @change="calcCharge(row)" />
                 </template>
               </el-table-column>
-              <el-table-column v-if="showMoreColumns" label="水价" width="80">
+              <el-table-column label="水价" width="80">
                 <template #default>{{ waterPrice }}</template>
               </el-table-column>
-              <el-table-column v-if="showMoreColumns" label="备注" min-width="120">
+              <el-table-column label="备注" min-width="120">
                 <template #default="{ row }">
                   <el-input v-model="row.note" placeholder="备注" size="small" />
                 </template>
               </el-table-column>
-              <el-table-column v-if="showMoreColumns" prop="abnormalReason" label="异常原因" min-width="140" show-overflow-tooltip />
+              <el-table-column prop="abnormalReason" label="异常原因" min-width="140" show-overflow-tooltip />
             </el-table>
 
             <el-empty v-else description="请选择左侧村组开始录入抄表" :image-size="84" class="wm-empty" />
@@ -172,6 +146,15 @@
 
         <section class="batch-actions">
           <span class="wm-chip">已完成 {{ completedCount }} / {{ totalCount }}</span>
+          <template v-if="selectedHouseholdIds.length>0">
+            <span class="wm-chip">已选 {{ selectedHouseholdIds.length }} 户</span>
+            <span class="wm-batch-label">批量改村组</span>
+            <el-select v-model="batchVillage" placeholder="选择村组" size="small" class="wm-batch-select" filterable allow-create>
+              <el-option v-for="v in allVillages" :key="v" :label="v" :value="v" />
+            </el-select>
+            <el-button size="small" type="primary" plain @click="applyBatchVillage" :disabled="!batchVillage">应用</el-button>
+          </template>
+          <div class="wm-toolbar-spacer"></div>
           <el-button size="small" type="primary" @click="batchSave" :loading="saving">批量保存</el-button>
           <el-button size="small" type="danger" @click="batchDeleteHouseholds" :disabled="selectedHouseholdIds.length===0">
             批量删除({{ selectedHouseholdIds.length }})
@@ -193,7 +176,6 @@ const allVillages = ref([])
 const filterKeyword = ref('')
 const waterPrice = ref(1.8)
 const abnormalThreshold = ref(100)
-const readingDoneCount = computed(() => tableData.value.filter(r => r.currentReading && !isNaN(r.currentReading)).length)
 const completedCount = computed(() => {
   return tableData.value.filter(r => r.currentReading && r.currentReading !== '' && !isNaN(Number(r.currentReading))).length
 })
@@ -202,7 +184,6 @@ const progressPercent = computed(() => {
   return totalCount.value > 0 ? Math.round((completedCount.value / totalCount.value) * 100) : 0
 })
 const saving = ref(false)
-const showMoreColumns = ref(false)
 const tableKeyword = ref('')
 const tablePage = ref(1)
 const tablePageSize = ref(20)
@@ -248,10 +229,11 @@ function rowClassName({ row }) {
 }
 
 function updateTableHeight() {
-  const panel = document.querySelector('.wm-reading-table-panel')
-  if (!panel) return
-  const rect = panel.getBoundingClientRect()
-  tableHeight.value = Math.max(300, Math.floor(window.innerHeight - rect.top - 72))
+  const shell = document.querySelector('.wm-reading-table-shell')
+  if (!shell) return
+  const pagination = shell.querySelector('.wm-reading-pagination')
+  const paginationHeight = pagination ? pagination.getBoundingClientRect().height : 0
+  tableHeight.value = Math.max(320, Math.floor(shell.clientHeight - paginationHeight - 6))
 }
 
 function selectVillage(v) {
@@ -402,7 +384,10 @@ async function loadTable() {
 }
 
 function onRowClick(row) { onSelectHousehold(row) }
-function onSelectionChange(rows) { selectedHouseholdIds.value = rows.map(r => r.id).filter(Boolean) }
+function onSelectionChange(rows) {
+  selectedHouseholdIds.value = rows.map(r => r.id).filter(Boolean)
+  nextTick(updateTableHeight)
+}
 
 async function applyBatchVillage() {
   if (!batchVillage.value || !selectedHouseholdIds.value.length) return
@@ -552,7 +537,7 @@ onMounted(async () => {
   window.addEventListener('resize', updateTableHeight, { passive: true })
 })
 
-watch([selectedVillage, showMoreColumns, tablePage, tablePageSize], () => {
+watch([selectedVillage, tablePage, tablePageSize], () => {
   nextTick(updateTableHeight)
 })
 
@@ -566,33 +551,23 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 
-.wm-page-header--compact {
-  padding-top: 8px;
-  padding-bottom: 8px;
-}
-
-.wm-page-header--compact .wm-page-title h1 {
-  font-size: 15px;
-}
-
-.wm-page-header--compact .wm-page-title p {
-  font-size: 11px;
-}
-
 .wm-readings-page {
+  max-width: none;
+  width: 100%;
+  margin: 0;
   min-height: 0;
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  gap: 10px;
+  gap: 8px;
 }
 
 .wm-reading-workspace {
   display: grid;
-  grid-template-columns: 232px minmax(0, 1fr);
-  gap: 8px;
-  align-items: start;
+  grid-template-columns: 224px minmax(0, 1fr);
+  gap: 6px;
+  align-items: stretch;
   min-height: 0;
   flex: 1;
   overflow: hidden;
@@ -601,70 +576,89 @@ onBeforeUnmount(() => {
 .wm-reading-sidebar {
   position: sticky;
   top: 0;
-  max-height: calc(100dvh - 184px);
+  max-height: calc(100dvh - 72px);
   overflow: auto;
   min-height: 0;
 }
 
+.wm-reading-sidebar :deep(.wm-panel-body),
+.wm-reading-sidebar .wm-panel-body {
+  padding: 12px;
+}
+
+.wm-reading-sidebar :deep(.el-form-item) {
+  margin-bottom: 10px;
+}
+
 .wm-reading-main {
+  min-width: 0;
+  height: 100%;
   min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  gap: 6px;
+}
+
+.wm-reading-toolbar {
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+
+.wm-reading-progress-inline {
+  min-width: 260px;
+  color: var(--wm-text-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.wm-reading-progress-inline strong {
+  color: var(--wm-primary);
+}
+
+.wm-reading-search {
+  width: 190px;
 }
 
 .wm-reading-table-panel {
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
   flex: 1;
   display: flex;
   flex-direction: column;
-}
-
-.wm-reading-progress {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 12px 16px;
-  background: #fff;
-  border: 1px solid #f3f4f6;
-  border-radius: 12px;
-  margin-bottom: 4px;
-}
-
-.wm-reading-progress-text {
-  color: #6b7280;
-  font-size: 14px;
-  white-space: nowrap;
-}
-
-.wm-reading-progress-text strong {
-  color: #2563eb;
 }
 
 .wm-reading-progress-bar {
   flex: 1;
-}
-
-.wm-reading-progress-percent {
-  color: #4b5563;
-  font-family: Consolas, "Courier New", monospace;
-  font-size: 14px;
+  min-width: 110px;
 }
 
 .batch-actions {
-  position: sticky;
-  bottom: 0;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 10px;
+  flex-wrap: nowrap;
+  gap: 8px;
+  min-height: 42px;
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(12px);
-  border-top: 1px solid #e2e8f0;
-  padding: 12px 20px;
+  border: 1px solid #dbe7ee;
+  border-radius: 10px;
+  padding: 6px 10px;
   z-index: 10;
+}
+
+.wm-batch-label {
+  color: var(--wm-text-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.wm-batch-select {
+  width: 150px;
 }
 
 .wm-reading-table-shell {
@@ -689,17 +683,17 @@ onBeforeUnmount(() => {
 }
 
 .wm-reading-table-shell :deep(.el-table__body tr.current-row > td) {
-  background-color: #dbeafe !important;
+  background-color: #e0f2fe !important;
 }
 
 .wm-reading-table-shell :deep(.el-table__body tr.is-selected-row > td) {
-  background-color: #bfdbfe !important;
-  box-shadow: inset 0 0 0 9999px rgba(37, 99, 235, 0.18);
+  background-color: #bae6fd !important;
+  box-shadow: inset 0 0 0 9999px rgba(2, 132, 199, 0.16);
   font-weight: 600;
 }
 
 .wm-reading-table-shell :deep(.el-table__body tr.is-selected-row:hover > td) {
-  background-color: #93c5fd !important;
+  background-color: #7dd3fc !important;
 }
 
 .wm-reading-table-shell :deep(.el-table__body tr.row-abnormal > td) {
@@ -720,11 +714,23 @@ onBeforeUnmount(() => {
 
 @media (max-width: 1280px) {
   .wm-reading-workspace {
-    grid-template-columns: 220px minmax(0, 1fr);
+    grid-template-columns: 212px minmax(0, 1fr);
+  }
+
+  .wm-reading-progress-inline {
+    min-width: 210px;
+  }
+
+  .wm-reading-search {
+    width: 160px;
   }
 }
 
 @media (max-width: 1024px) {
+  .wm-readings-page {
+    overflow: visible;
+  }
+
   .wm-reading-workspace {
     grid-template-columns: 1fr;
     height: auto;
@@ -736,17 +742,22 @@ onBeforeUnmount(() => {
     max-height: none;
   }
 
+  .wm-reading-toolbar,
+  .batch-actions {
+    flex-wrap: wrap;
+  }
+
+  .wm-reading-search,
+  .wm-batch-select {
+    width: 100%;
+  }
+
   .wm-reading-table-shell {
     max-height: none;
   }
 }
 
 @media (max-width: 768px) {
-  .wm-page-header--compact {
-    padding-top: 8px;
-    padding-bottom: 8px;
-  }
-
   .wm-reading-table-shell :deep(.el-table) {
     min-width: 1120px;
   }

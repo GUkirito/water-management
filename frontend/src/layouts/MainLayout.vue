@@ -51,7 +51,7 @@
     </el-aside>
 
     <el-container class="wm-main">
-      <el-header class="wm-topbar">
+      <el-header :class="topbarClass">
         <div class="wm-topbar-left">
           <el-button class="wm-icon-button" circle plain @click="isCollapsed = !isCollapsed">
             <el-icon>
@@ -97,6 +97,7 @@ const isCollapsed = ref(false)
 const activeMenu = computed(() => route.path)
 const currentTitle = computed(() => route.meta?.title || '')
 const contentClass = computed(() => ['wm-content', route.path === '/readings' ? 'wm-content--readings' : ''])
+const topbarClass = computed(() => ['wm-topbar', route.path === '/readings' ? 'wm-topbar--compact' : ''])
 </script>
 
 <style scoped>
@@ -106,10 +107,15 @@ const contentClass = computed(() => ['wm-content', route.path === '/readings' ? 
 }
 
 .wm-sidebar {
-  position: relative;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
+  height: 100dvh;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(14, 165, 233, 0.18), transparent 34%),
+    linear-gradient(180deg, #083344 0%, #0f172a 58%, #111827 100%);
   border-right: 1px solid rgba(148, 163, 184, 0.16);
   overflow: hidden;
 }
@@ -128,9 +134,10 @@ const contentClass = computed(() => ['wm-content', route.path === '/readings' ? 
   height: 40px;
   display: grid;
   place-items: center;
-  border-radius: 12px;
-  background: rgba(37, 99, 235, 0.2);
-  color: #dbeafe;
+  border-radius: 14px 14px 14px 6px;
+  background: rgba(2, 132, 199, 0.22);
+  color: #e0f2fe;
+  box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.25);
   font-weight: 700;
 }
 
@@ -181,7 +188,7 @@ const contentClass = computed(() => ['wm-content', route.path === '/readings' ? 
 
 .wm-menu :deep(.el-menu-item.is-active) {
   position: relative;
-  background: rgba(37, 99, 235, 0.1) !important;
+  background: rgba(2, 132, 199, 0.16) !important;
 }
 
 .wm-menu :deep(.el-menu-item.is-active)::before {
@@ -192,7 +199,7 @@ const contentClass = computed(() => ['wm-content', route.path === '/readings' ? 
   transform: translateY(-50%);
   width: 3px;
   height: 24px;
-  background: #2563eb;
+  background: var(--wm-primary);
   border-radius: 0 3px 3px 0;
 }
 
@@ -214,6 +221,20 @@ const contentClass = computed(() => ['wm-content', route.path === '/readings' ? 
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--wm-border);
+}
+
+.wm-topbar--compact {
+  height: 52px;
+  padding: 0 16px;
+}
+
+.wm-topbar--compact .wm-page-title h1 {
+  font-size: 16px;
+}
+
+.wm-topbar--compact .wm-page-title p,
+.wm-topbar--compact .wm-topbar-right {
+  display: none;
 }
 
 .wm-topbar-left {
@@ -238,9 +259,10 @@ const contentClass = computed(() => ['wm-content', route.path === '/readings' ? 
 .wm-content--readings {
   display: flex;
   flex-direction: column;
+  height: calc(100dvh - 52px);
   min-height: 0;
   overflow: hidden;
-  padding: 16px;
+  padding: 6px 8px;
 }
 
 .wm-mobile-brand {
@@ -278,7 +300,9 @@ const contentClass = computed(() => ['wm-content', route.path === '/readings' ? 
   }
 
   .wm-sidebar {
+    position: relative;
     width: 100% !important;
+    height: auto;
     max-height: 72px;
     flex-direction: row;
     align-items: center;
@@ -329,7 +353,7 @@ const contentClass = computed(() => ['wm-content', route.path === '/readings' ? 
   }
 
   .wm-content--readings {
-    padding: 12px;
+    padding: 8px;
   }
 
   .wm-brand {
@@ -351,10 +375,10 @@ const contentClass = computed(() => ['wm-content', route.path === '/readings' ? 
   .wm-mobile-brand-mark {
     width: 34px;
     height: 34px;
-    border-radius: 10px;
+    border-radius: 12px 12px 12px 5px;
     display: grid;
     place-items: center;
-    background: rgba(37, 99, 235, 0.12);
+    background: rgba(2, 132, 199, 0.12);
     color: var(--wm-primary);
     font-weight: 700;
   }

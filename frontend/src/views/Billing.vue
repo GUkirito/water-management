@@ -53,11 +53,12 @@
           <el-button @click="resetPendingFilters">重置</el-button>
         </div>
 
+        <div v-if="pendingListLoading" class="skeleton wm-table-skeleton"></div>
         <el-table
+          v-else
           :data="pendingBillRows"
           border
           stripe
-          v-loading="pendingListLoading"
           class="wm-billing-list-table"
           @row-dblclick="startPayFromBill"
         >
@@ -175,7 +176,7 @@
     <el-dialog v-model="historyVisible" title="缴费历史" width="720px" :close-on-click-modal="false">
       <div v-loading="historyLoading" style="min-height:120px">
         <el-table :data="historyList" border stripe size="small" max-height="420">
-          <el-table-column type="index" label="#" width="50" />
+          <el-table-column type="index" label="序号" width="60" />
           <el-table-column label="账单月份" width="100">
             <template #default="{ row }">{{ billYearMonthMap[row.billId] || '-' }}</template>
           </el-table-column>

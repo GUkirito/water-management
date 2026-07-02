@@ -11,40 +11,48 @@
     </section>
 
     <section class="wm-toolbar">
-      <span style="font-weight:600;color:var(--wm-text)">村组</span>
-      <el-select v-model="selectedVillage" placeholder="选择村组" @change="handleFilterChange" style="width:160px" clearable>
-        <el-option v-for="v in villageList" :key="v" :label="v" :value="v" />
-      </el-select>
-      <span style="font-weight:600;color:var(--wm-text)">状态</span>
-      <el-select v-model="filterStatus" placeholder="全部" @change="handleFilterChange" style="width:130px" clearable>
-        <el-option label="全部" value="" />
-        <el-option label="已收" value="已收" />
-        <el-option label="未收" value="未收" />
-        <el-option label="部分收" value="部分收" />
-      </el-select>
-      <span style="font-weight:600;color:var(--wm-text)">收款日期</span>
-      <el-date-picker v-model="paidDateRange" type="daterange" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" value-format="YYYY-MM-DD" @change="handleFilterChange" style="width:260px" />
-      <el-input v-model="filterKeyword" placeholder="户名/表号" @keyup.enter="loadData" style="width:180px" clearable />
-      <el-button type="primary" @click="loadData">查询</el-button>
-      <el-button type="success" @click="handleCreate">新增</el-button>
-      <el-button
-        type="primary"
-        :disabled="selectedCollectRows.length === 0"
-        @click="handleBatchCollect"
-        :icon="Plus"
-      >
-        批量收费（{{ selectedCollectRows.length }}）
-      </el-button>
-      <el-upload :before-upload="importExcelFile" :show-file-list="false" accept=".xlsx">
-        <el-button type="warning">导入材料费</el-button>
-      </el-upload>
-      <el-button type="info" @click="exportExcel">导出Excel</el-button>
-      <el-button type="danger" @click="handleBatchDelete" :disabled="selectedRows.length===0">批量删除</el-button>
+      <div class="wm-toolbar-group">
+        <span class="wm-toolbar-label">村组</span>
+        <el-select v-model="selectedVillage" placeholder="选择村组" @change="handleFilterChange" style="width:160px" clearable>
+          <el-option v-for="v in villageList" :key="v" :label="v" :value="v" />
+        </el-select>
+        <span class="wm-toolbar-label">状态</span>
+        <el-select v-model="filterStatus" placeholder="全部" @change="handleFilterChange" style="width:130px" clearable>
+          <el-option label="全部" value="" />
+          <el-option label="已收" value="已收" />
+          <el-option label="未收" value="未收" />
+          <el-option label="部分收" value="部分收" />
+        </el-select>
+      </div>
+      <div class="wm-toolbar-group">
+        <span class="wm-toolbar-label">收款日期</span>
+        <el-date-picker v-model="paidDateRange" type="daterange" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" value-format="YYYY-MM-DD" @change="handleFilterChange" style="width:260px" />
+        <el-input v-model="filterKeyword" placeholder="户名/表号" @keyup.enter="loadData" style="width:180px" clearable />
+        <el-button type="primary" @click="loadData">查询</el-button>
+      </div>
+      <div class="wm-toolbar-spacer"></div>
+      <div class="wm-toolbar-group">
+        <el-button type="primary" @click="handleCreate">新增</el-button>
+        <el-button
+          type="primary"
+          :disabled="selectedCollectRows.length === 0"
+          @click="handleBatchCollect"
+          :icon="Plus"
+        >
+          批量收费（{{ selectedCollectRows.length }}）
+        </el-button>
+        <el-upload :before-upload="importExcelFile" :show-file-list="false" accept=".xlsx">
+          <el-button>导入材料费</el-button>
+        </el-upload>
+        <el-button @click="exportExcel">导出Excel</el-button>
+        <el-button type="danger" plain @click="handleBatchDelete" :disabled="selectedRows.length===0">批量删除</el-button>
+      </div>
     </section>
 
     <section class="wm-panel">
       <div class="wm-table-shell">
-        <el-table :data="tableData" border stripe max-height="calc(100vh - 360px)" style="width:100%" v-loading="loading" @selection-change="onSelectionChange">
+        <div v-if="loading" class="skeleton wm-table-skeleton"></div>
+        <el-table v-else :data="tableData" border stripe max-height="calc(100vh - 360px)" style="width:100%" @selection-change="onSelectionChange">
           <el-table-column type="selection" width="50" :selectable="row => row.status === '未收'" />
           <el-table-column type="index" label="序号" width="60" />
           <el-table-column prop="householdName" label="户主姓名" width="120" />
@@ -92,7 +100,11 @@
       </div>
     </section>
 
-    <el-dialog v-model="formVisible" :title="formMode==='create'?'新增材料费':'编辑材料费'" width="520px" :close-on-click-modal="false">
+    <el-drawer v-model="formVisible" :title="formMode==='create'?'新增材料费':'编辑材料费'" size="420px" :close-on-click-modal="false">
+      <div class="wm-drawer-summary">
+        <div class="wm-drawer-summary-title">{{ formMode === 'create' ? '录入一笔材料费' : form.householdName || '编辑材料费' }}</div>
+        <div class="wm-drawer-summary-meta">保持表号、村组和金额准确，保存后会进入材料费台账。</div>
+      </div>
       <el-form :model="form" label-width="110px">
         <el-form-item label="户主姓名" required><el-input v-model="form.householdName" /></el-form-item>
         <el-form-item label="表号" required><el-input v-model="form.waterMeterId" /></el-form-item>
@@ -110,7 +122,7 @@
         <el-button @click="formVisible=false">取消</el-button>
         <el-button type="primary" @click="saveForm" :loading="savingForm">保存</el-button>
       </template>
-    </el-dialog>
+    </el-drawer>
 
     <el-dialog v-model="importResultVisible" title="导入结果" width="600px" :close-on-click-modal="false">
       <div class="mb-4">
@@ -143,7 +155,11 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="collectVisible" title="收取材料费" width="500px" :close-on-click-modal="false">
+    <el-drawer v-model="collectVisible" title="收取材料费" size="420px" :close-on-click-modal="false">
+      <div class="wm-drawer-summary">
+        <div class="wm-drawer-summary-title">{{ collectForm.householdName }}</div>
+        <div class="wm-drawer-summary-meta">未收金额 ¥{{ Number(collectForm.unpaid || 0).toFixed(2) }}，确认后将更新收款状态。</div>
+      </div>
       <el-form :model="collectForm" label-width="100px">
         <el-form-item label="户主"><span style="font-weight:700">{{ collectForm.householdName }}</span></el-form-item>
         <el-form-item label="表号"><span>{{ collectForm.waterMeterId }}</span></el-form-item>
@@ -159,7 +175,7 @@
         <el-button @click="collectVisible=false">取消</el-button>
         <el-button type="primary" @click="doCollect" :loading="collecting">确认收费</el-button>
       </template>
-    </el-dialog>
+    </el-drawer>
   </div>
 </template>
 

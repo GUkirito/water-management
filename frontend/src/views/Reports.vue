@@ -52,7 +52,8 @@
             </div>
           </div>
 
-          <el-table :data="waterData" border stripe max-height="calc(100vh - 460px)" v-loading="waterLoading">
+          <div v-if="waterLoading" class="skeleton wm-table-skeleton"></div>
+          <el-table v-else :data="waterData" border stripe max-height="calc(100vh - 460px)">
             <el-table-column prop="villageName" label="村名" width="120" />
             <el-table-column prop="waterMeterId" label="水表编号" width="140" />
             <el-table-column prop="householdName" label="户名" width="120" />
@@ -61,7 +62,7 @@
             <el-table-column prop="actualWaterPaid" label="实收水费" width="120" />
             <el-table-column label="欠费" width="120">
               <template #default="{ row }">
-                <span :style="{ color: unpaidWater(row) > 0 ? '#F56C6C' : '#67C23A', fontWeight: 500 }">
+                <span :style="{ color: unpaidWater(row) > 0 ? 'var(--wm-danger)' : 'var(--wm-success)', fontWeight: 600 }">
                   ¥{{ unpaidWater(row).toFixed(2) }}
                 </span>
               </template>
@@ -124,7 +125,8 @@
             </div>
           </div>
 
-          <el-table :data="materialData" border stripe max-height="calc(100vh - 460px)" v-loading="matLoading">
+          <div v-if="matLoading" class="skeleton wm-table-skeleton"></div>
+          <el-table v-else :data="materialData" border stripe max-height="calc(100vh - 460px)">
             <el-table-column prop="waterMeterId" label="水表编号" width="140" />
             <el-table-column prop="householdName" label="户名" width="120" />
             <el-table-column prop="villageName" label="村名" width="120" />
@@ -132,7 +134,7 @@
             <el-table-column prop="actualPaid" label="实收材料费" width="130" />
             <el-table-column label="欠费" width="120">
               <template #default="{ row }">
-                <span :style="{ color: Number(row.unpaid) > 0 ? '#F56C6C' : '#67C23A', fontWeight: 500 }">
+                <span :style="{ color: Number(row.unpaid) > 0 ? 'var(--wm-danger)' : 'var(--wm-success)', fontWeight: 600 }">
                   ¥{{ row.unpaid }}
                 </span>
               </template>
@@ -340,26 +342,25 @@ function downloadBlob(blob, filename) {
   margin: 12px 0 16px;
 }
 .wm-kpi-card {
-  background: #fff;
-  border: 1px solid #ebeef5;
-  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fcff 100%);
+  border: 1px solid var(--wm-border);
+  border-radius: 12px;
   padding: 12px 16px;
-  text-align: center;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  box-shadow: var(--wm-shadow-soft);
 }
 .wm-kpi-label {
   font-size: 13px;
-  color: #909399;
+  color: var(--wm-text-2);
   margin-bottom: 6px;
 }
 .wm-kpi-value {
   font-size: 22px;
-  font-weight: 600;
-  color: #303133;
+  font-weight: 700;
+  color: var(--wm-text);
 }
-.wm-text-ok { color: #67C23A; }
-.wm-text-warn { color: #E6A23C; }
-.wm-text-bad { color: #F56C6C; }
+.wm-text-ok { color: var(--wm-success); }
+.wm-text-warn { color: var(--wm-warning); }
+.wm-text-bad { color: var(--wm-danger); }
 @media (max-width: 1100px) {
   .wm-kpi-grid { grid-template-columns: repeat(2, 1fr); }
 }
