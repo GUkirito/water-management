@@ -41,9 +41,8 @@
         >
           批量收费（{{ selectedCollectRows.length }}）
         </el-button>
-        <el-upload :before-upload="importExcelFile" :show-file-list="false" accept=".xlsx">
-          <el-button>导入材料费</el-button>
-        </el-upload>
+        <el-button @click="triggerMaterialImport">导入材料费</el-button>
+        <input ref="materialImportInput" class="wm-hidden-file-input" type="file" accept=".xlsx" @change="onMaterialImportFileChange" />
         <el-button @click="exportExcel">导出Excel</el-button>
         <el-button type="danger" plain @click="handleBatchDelete" :disabled="selectedRows.length===0">批量删除</el-button>
       </div>
@@ -96,7 +95,7 @@
         </el-empty>
       </div>
       <div style="padding:14px 0;display:flex;justify-content:flex-end">
-        <el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize" :total="total" :page-sizes="[10,20,50]" layout="total,sizes,prev,pager,next" @size-change="loadData" @current-change="loadData" />
+        <el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize" :total="total" :page-sizes="[10,20,50,100]" layout="total,sizes,prev,pager,next" @size-change="loadData" @current-change="loadData" />
       </div>
     </section>
 
@@ -197,6 +196,7 @@ const loading = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
+const materialImportInput = ref(null)
 
 const formVisible = ref(false)
 const formMode = ref('create')
@@ -335,6 +335,18 @@ async function handleBatchDelete() {
   } catch {}
 }
 
+function triggerMaterialImport() {
+  materialImportInput.value?.click()
+}
+
+async function onMaterialImportFileChange(event) {
+  const input = event.target
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  await importExcelFile(file)
+}
+
 async function importExcelFile(file) {
   const fd = new FormData()
   fd.append('file', file)
@@ -350,7 +362,9 @@ async function importExcelFile(file) {
     })
     await loadData()
     await loadVillages()
-  } catch {}
+  } catch (error) {
+    ElMessage.error(error?.message || '材料费导入失败')
+  }
   return false
 }
 
@@ -494,3 +508,9 @@ async function handleBatchCollect() {
   await loadData()
 }
 </script>
+
+<style scoped>
+.wm-hidden-file-input {
+  display: none;
+}
+</style>

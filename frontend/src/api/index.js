@@ -23,7 +23,8 @@ api.interceptors.response.use(
     }
   },
   error => {
-    ElMessage.error('网络错误：' + (error.message || '请检查服务器连接'))
+    const message = error.response?.data?.message || error.message || '请检查服务器连接'
+    ElMessage.error('请求失败：' + message)
     return Promise.reject(error)
   }
 )
@@ -36,12 +37,8 @@ export const householdApi = {
   update: (id, data) => api.put(`/households/update/${id}`, data),
   delete: (id) => api.delete(`/households/delete/${id}`),
   exportExcel: (params) => api.get('/households/export', { params, responseType: 'blob' }),
-  importExcel: (formData) => api.post('/households/import', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  }),
-  importFromRegister: (formData) => api.post('/households/import-from-register', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  }),
+  importExcel: (formData) => api.post('/households/import', formData),
+  importFromRegister: (formData) => api.post('/households/import-from-register', formData),
   batchUpdateVillage: (ids, villageName) => api.put('/households/batch-update-village', { ids, villageName }),
   batchDelete: (ids) => api.post('/households/batch-delete', { ids }),
   deleteByVillage: (villageName) => api.delete('/households/delete-by-village', { params: { villageName } })
@@ -53,9 +50,7 @@ export const readingApi = {
     params,
     responseType: 'blob'
   }),
-  importReadings: (formData) => api.post('/readings/import', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  }),
+  importReadings: (formData) => api.post('/readings/import', formData),
   batchSave: (items, readingDate) => api.post('/readings/batch', items, {
     params: { readingDate }
   }),
@@ -91,9 +86,7 @@ export const materialRecordApi = {
   update: (id, data) => api.put(`/material-records/${id}`, data),
   delete: (id) => api.delete(`/material-records/${id}`),
   batchDelete: (ids) => api.post('/material-records/batch-delete', { ids }),
-  importExcel: (formData) => api.post('/material-records/import', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  }),
+  importExcel: (formData) => api.post('/material-records/import', formData),
   exportExcel: (params) => api.get('/material-records/export', {
     params, responseType: 'blob'
   }),
@@ -115,9 +108,7 @@ export const reportApi = {
 export const settingsApi = {
   getInfo: () => api.get('/settings/info'),
   downloadBackup: () => api.get('/settings/backup/download', { responseType: 'blob' }),
-  restoreBackup: (formData) => api.post('/settings/backup/restore', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  })
+  restoreBackup: (formData) => api.post('/settings/backup/restore', formData)
 }
 
 export default api

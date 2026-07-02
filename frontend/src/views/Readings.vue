@@ -66,19 +66,15 @@
           </div>
           <div class="wm-toolbar-group">
             <el-button size="small" @click="exportTemplate">导出空白模板</el-button>
-            <el-dropdown trigger="click" @command="handleImportCommand">
-              <el-button size="small" type="warning">导入模板</el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="readings">导入抄表数据</el-dropdown-item>
-                  <el-dropdown-item command="register">导入住户信息</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
+            <el-button size="small" type="warning" @click="triggerReadingImport">导入抄表</el-button>
+            <el-button size="small" @click="triggerRegisterImport">导入住户</el-button>
           </div>
           <div class="wm-toolbar-spacer"></div>
           <el-input v-model="tableKeyword" placeholder="搜索户名/表号" size="small" class="wm-reading-search" clearable />
         </section>
+
+        <input ref="readingImportInput" class="wm-hidden-file-input" type="file" accept=".xlsx" @change="onReadingImportFileChange" />
+        <input ref="registerImportInput" class="wm-hidden-file-input" type="file" accept=".xlsx" @change="onRegisterImportFileChange" />
 
         <section class="wm-panel wm-reading-table-panel">
           <div class="wm-table-shell wm-reading-table-shell">
@@ -160,6 +156,33 @@
             批量删除({{ selectedHouseholdIds.length }})
           </el-button>
         </section>
+
+        <el-dialog v-model="importResultVisible" :title="importResultTitle" width="640px" :close-on-click-modal="false">
+          <div class="mb-4">
+            <div class="flex gap-4 text-sm">
+              <span>共处理 <strong>{{ importResult.total }}</strong> 条</span>
+              <span class="text-emerald-600">成功 <strong>{{ importResult.success }}</strong> 条</span>
+              <span v-if="importResult.abnormal" class="text-orange-500">异常 <strong>{{ importResult.abnormal }}</strong> 条</span>
+              <span class="text-red-500">失败 <strong>{{ importResult.fail }}</strong> 条</span>
+              <span class="text-gray-400">跳过 <strong>{{ importResult.skip }}</strong> 条</span>
+            </div>
+          </div>
+          <el-table :data="importResult.details" max-height="400" border size="small">
+            <el-table-column prop="type" label="类型" width="100" />
+            <el-table-column prop="waterMeterId" label="表号" width="120" />
+            <el-table-column label="结果" width="100">
+              <template #default="{ row }">
+                <el-tag v-if="row.status === 'success'" type="success" size="small">成功</el-tag>
+                <el-tag v-else-if="row.status === 'skip'" type="info" size="small">跳过</el-tag>
+                <el-tag v-else type="danger" size="small">失败</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="message" label="说明" min-width="220" show-overflow-tooltip />
+          </el-table>
+          <template #footer>
+            <el-button @click="importResultVisible = false">关闭</el-button>
+          </template>
+        </el-dialog>
       </main>
     </div>
   </div>
@@ -197,6 +220,18 @@ const savingHousehold = ref(false)
 const tableData = ref([])
 const selectedHouseholdIds = ref([])
 const batchVillage = ref('')
+const readingImportInput = ref(null)
+const registerImportInput = ref(null)
+const importResultVisible = ref(false)
+const importResultTitle = ref('导入结果')
+const importResult = ref({
+  total: 0,
+  success: 0,
+  fail: 0,
+  skip: 0,
+  abnormal: 0,
+  details: []
+})
 
 const filteredHouseholdList = computed(() => {
   if (!filterKeyword.value) return householdList.value
@@ -450,35 +485,134 @@ function calcCharge(row) {
   row.waterCharge = c != null && !isNaN(c) && c >= 0 ? (c * waterPrice.value).toFixed(2) : null
 }
 
-function handleImportCommand(cmd) {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = '.xlsx'
-  input.onchange = async e => {
-    const file = e.target.files[0]
-    if (!file) return
-    if (cmd === 'readings') {
-      const fd = new FormData()
-      fd.append('file', file)
-      fd.append('readingDate', readingDate.value)
-      try {
-        const r = await readingApi.importReadings(fd)
-        ElMessage.success(`成功 ${r.total} 条`)
-        loadTable()
-      } catch {}
-    } else {
-      const fd = new FormData()
-      fd.append('file', file)
-      try {
-        const r = await householdApi.importFromRegister(fd)
-        ElMessage.success(`新增 ${r.inserted} 户`)
-        loadTable()
-        loadHouseholdList()
-        loadAllVillages()
-      } catch {}
-    }
+function triggerReadingImport() {
+  readingImportInput.value?.click()
+}
+
+function triggerRegisterImport() {
+  registerImportInput.value?.click()
+}
+
+async function onReadingImportFileChange(event) {
+  const input = event.target
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+
+  const fd = new FormData()
+  fd.append('file', file)
+  fd.append('readingDate', readingDate.value)
+  try {
+    const result = await readingApi.importReadings(fd)
+    importResultTitle.value = '抄表导入结果'
+    importResult.value = normalizeReadingImportResult(result || {})
+    importResultVisible.value = true
+    ElNotification({
+      title: '抄表导入完成',
+      message: `成功 ${importResult.value.success} 条，异常 ${importResult.value.abnormal} 条，失败 ${importResult.value.fail} 条`,
+      type: importResult.value.fail > 0 ? 'warning' : 'success',
+      duration: 4000
+    })
+    await loadTable()
+  } catch (error) {
+    ElMessage.error(error?.message || '抄表数据导入失败')
   }
-  input.click()
+}
+
+async function onRegisterImportFileChange(event) {
+  const input = event.target
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+
+  const fd = new FormData()
+  fd.append('file', file)
+  try {
+    const result = await householdApi.importFromRegister(fd)
+    importResultTitle.value = '住户导入结果'
+    importResult.value = normalizeRegisterImportResult(result || {})
+    importResultVisible.value = true
+    ElNotification({
+      title: '住户导入完成',
+      message: `新增 ${importResult.value.success} 户，跳过 ${importResult.value.skip} 户，错误 ${importResult.value.fail} 条`,
+      type: importResult.value.fail ? 'warning' : 'success',
+      duration: 4000
+    })
+    await loadTable()
+    await loadHouseholdList()
+    await loadAllVillages()
+  } catch (error) {
+    ElMessage.error(error?.message || '住户信息导入失败')
+  }
+}
+
+function normalizeReadingImportResult(result) {
+  const errors = Array.isArray(result.errors) ? result.errors : []
+  const success = Number(result.total || 0)
+  const abnormal = Number(result.abnormal || 0)
+  const fail = errors.length
+  const details = errors.map((message, index) => ({
+    type: '抄表',
+    waterMeterId: extractWaterMeterId(message),
+    status: 'fail',
+    message: String(message || `第 ${index + 1} 条处理失败`)
+  }))
+
+  if (!details.length && success > 0) {
+    details.push({
+      type: '抄表',
+      waterMeterId: '-',
+      status: 'success',
+      message: abnormal > 0 ? `成功导入 ${success} 条，其中 ${abnormal} 条被标记为异常` : `成功导入 ${success} 条抄表记录`
+    })
+  }
+
+  return {
+    total: success + fail,
+    success,
+    fail,
+    skip: 0,
+    abnormal,
+    details
+  }
+}
+
+function normalizeRegisterImportResult(result) {
+  const errors = Array.isArray(result.errors) ? result.errors : []
+  const success = Number(result.inserted || 0)
+  const skip = Number(result.skipped || 0)
+  const details = errors.map((message, index) => ({
+    type: '住户',
+    waterMeterId: extractWaterMeterId(message),
+    status: String(message).startsWith('跳过') ? 'skip' : 'fail',
+    message: String(message || `第 ${index + 1} 条处理失败`)
+  }))
+
+  if (!details.length && success > 0) {
+    details.push({
+      type: '住户',
+      waterMeterId: '-',
+      status: 'success',
+      message: `成功导入 ${success} 户`
+    })
+  }
+
+  return {
+    total: success + errors.length,
+    success,
+    fail: Math.max(0, errors.length - skip),
+    skip,
+    abnormal: 0,
+    details
+  }
+}
+
+function extractWaterMeterId(message) {
+  const text = String(message || '')
+  const explicitMatch = text.match(/表号\s*([^，,\s]+)/)
+  if (explicitMatch) return explicitMatch[1]
+  const prefixMatch = text.match(/^([^:：]+)[:：]/)
+  return prefixMatch ? prefixMatch[1] : '-'
 }
 
 async function exportTemplate() {
@@ -619,6 +753,10 @@ onBeforeUnmount(() => {
 
 .wm-reading-search {
   width: 190px;
+}
+
+.wm-hidden-file-input {
+  display: none;
 }
 
 .wm-reading-table-panel {
