@@ -114,7 +114,6 @@
           </el-select>
         </el-form-item>
         <el-form-item label="材料费总额"><el-input-number v-model="form.totalFee" :precision="2" :min="0" style="width:100%" /></el-form-item>
-        <el-form-item label="最近收款日期"><el-date-picker v-model="form.paidAt" type="date" value-format="YYYY-MM-DD" style="width:100%" /></el-form-item>
         <el-form-item label="备注"><el-input v-model="form.note" type="textarea" :rows="2" /></el-form-item>
       </el-form>
       <template #footer>
@@ -201,7 +200,7 @@ const materialImportInput = ref(null)
 const formVisible = ref(false)
 const formMode = ref('create')
 const savingForm = ref(false)
-const form = ref({ id: null, householdName: '', waterMeterId: '', phone: '', villageName: '', totalFee: 1500, paidAt: '', note: '' })
+const form = ref({ id: null, householdName: '', waterMeterId: '', phone: '', villageName: '', totalFee: 1500, note: '' })
 
 const importResultVisible = ref(false)
 const importResult = ref({
@@ -255,7 +254,7 @@ function onSelectionChange(rows) {
 function handleCreate() {
   formMode.value = 'create'
   formVisible.value = true
-  form.value = { id: null, householdName: '', waterMeterId: '', phone: '', villageName: selectedVillage.value || '', totalFee: 1500, paidAt: '', note: '' }
+  form.value = { id: null, householdName: '', waterMeterId: '', phone: '', villageName: selectedVillage.value || '', totalFee: 1500, note: '' }
 }
 
 function handleEdit(row) {
@@ -268,7 +267,6 @@ function handleEdit(row) {
     phone: row.phone || '',
     villageName: row.villageName || '',
     totalFee: Number(row.totalFee) || 1500,
-    paidAt: row.paidAt || '',
     note: row.note || ''
   }
 }
@@ -286,7 +284,6 @@ async function saveForm() {
         phone: form.value.phone,
         villageName: form.value.villageName,
         totalFee: form.value.totalFee,
-        paidAt: form.value.paidAt || undefined,
         note: form.value.note
       })
     } else {
@@ -296,7 +293,6 @@ async function saveForm() {
         phone: form.value.phone,
         villageName: form.value.villageName,
         totalFee: form.value.totalFee,
-        paidAt: form.value.paidAt || undefined,
         note: form.value.note
       })
     }

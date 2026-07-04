@@ -5,7 +5,9 @@ import com.example.watermanagement.dto.HouseholdRequest;
 import com.example.watermanagement.entity.Household;
 import com.example.watermanagement.exception.BusinessException;
 import com.example.watermanagement.repository.HouseholdRepository;
+import com.example.watermanagement.repository.MaterialRecordRepository;
 import com.example.watermanagement.repository.PaymentRepository;
+import com.example.watermanagement.repository.PrepaymentLogRepository;
 import com.example.watermanagement.repository.ReadingRepository;
 import com.example.watermanagement.repository.WaterBillRepository;
 import com.example.watermanagement.service.HouseholdService;
@@ -35,6 +37,8 @@ public class HouseholdServiceImpl implements HouseholdService {
     private final ReadingRepository readingRepository;
     private final WaterBillRepository waterBillRepository;
     private final PaymentRepository paymentRepository;
+    private final PrepaymentLogRepository prepaymentLogRepository;
+    private final MaterialRecordRepository materialRecordRepository;
 
     @Override
     public Page<Household> list(List<String> villageNames, String waterMeterId, Pageable pageable) {
@@ -76,9 +80,7 @@ public class HouseholdServiceImpl implements HouseholdService {
                 .phone(request.getPhone())
                 .villageName(request.getVillageName())
                 .waterMeterId(request.getWaterMeterId())
-                .materialFeeTotal(request.getMaterialFeeTotal() != null
-                        ? request.getMaterialFeeTotal()
-                        : new java.math.BigDecimal("1500.00"))
+                .materialFeeTotal(new java.math.BigDecimal("1500.00"))
                 .isActive(true)
                 .build();
         household = householdRepository.save(household);
@@ -91,21 +93,20 @@ public class HouseholdServiceImpl implements HouseholdService {
     @Transactional
     public Household update(Long id, HouseholdRequest request) {
         Household household = getById(id);
+        String oldMeterId = household.getWaterMeterId();
 
         // 如果修改了水表编号，检查新编号是否已被占用
-        if (!household.getWaterMeterId().equals(request.getWaterMeterId())) {
+        if (!oldMeterId.equals(request.getWaterMeterId())) {
             if (householdRepository.existsByWaterMeterId(request.getWaterMeterId())) {
                 throw new BusinessException("水表编号已被占用: " + request.getWaterMeterId());
             }
+            syncWaterMeterId(oldMeterId, request.getWaterMeterId());
         }
 
         household.setHouseholdName(request.getHouseholdName());
         household.setPhone(request.getPhone());
         household.setVillageName(request.getVillageName());
         household.setWaterMeterId(request.getWaterMeterId());
-        if (request.getMaterialFeeTotal() != null) {
-            household.setMaterialFeeTotal(request.getMaterialFeeTotal());
-        }
 
         log.info("更新村民: {} [水表: {}]", household.getHouseholdName(), household.getWaterMeterId());
         return householdRepository.save(household);
@@ -124,8 +125,38 @@ public class HouseholdServiceImpl implements HouseholdService {
                             .forEach(p -> paymentRepository.delete(p));
                     waterBillRepository.delete(wb);
                 });
+        prepaymentLogRepository.findByWaterMeterIdOrderByCreatedAtDesc(meterId)
+                .forEach(prepaymentLogRepository::delete);
         householdRepository.delete(household);
         log.info("物理删除村民: {} [水表: {}]", household.getHouseholdName(), meterId);
+    }
+
+    private void syncWaterMeterId(String oldMeterId, String newMeterId) {
+        readingRepository.findByWaterMeterIdInOrderByReadingDateDesc(List.of(oldMeterId))
+                .forEach(r -> {
+                    r.setWaterMeterId(newMeterId);
+                    readingRepository.save(r);
+                });
+        waterBillRepository.findByWaterMeterId(oldMeterId)
+                .forEach(wb -> {
+                    wb.setWaterMeterId(newMeterId);
+                    waterBillRepository.save(wb);
+                });
+        prepaymentLogRepository.findByWaterMeterIdOrderByCreatedAtDesc(oldMeterId)
+                .forEach(log -> {
+                    log.setWaterMeterId(newMeterId);
+                    prepaymentLogRepository.save(log);
+                });
+        materialRecordRepository.findByWaterMeterId(oldMeterId)
+                .ifPresent(record -> {
+                    materialRecordRepository.findByWaterMeterId(newMeterId)
+                            .filter(existing -> !existing.getId().equals(record.getId()))
+                            .ifPresent(existing -> {
+                                throw new BusinessException("material record water meter id exists: " + newMeterId);
+                            });
+                    record.setWaterMeterId(newMeterId);
+                    materialRecordRepository.save(record);
+                });
     }
 
     @Override
@@ -224,9 +255,7 @@ public class HouseholdServiceImpl implements HouseholdService {
                     .phone(row.getPhone())
                     .villageName(row.getVillageName())
                     .waterMeterId(row.getWaterMeterId())
-                    .materialFeeTotal(row.getMaterialFeeTotal() != null
-                            ? row.getMaterialFeeTotal()
-                            : new java.math.BigDecimal("1500.00"))
+                    .materialFeeTotal(new java.math.BigDecimal("1500.00"))
                     .isActive(true)
                     .build();
             householdRepository.save(household);

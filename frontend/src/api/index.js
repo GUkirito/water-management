@@ -50,7 +50,14 @@ export const readingApi = {
     params,
     responseType: 'blob'
   }),
+  exportHistoryTemplate: (params) => api.get('/readings/history-template', {
+    params,
+    responseType: 'blob'
+  }),
+  previewImportReadings: (formData) => api.post('/readings/import/preview', formData),
   importReadings: (formData) => api.post('/readings/import', formData),
+  previewHistoryReadings: (formData) => api.post('/readings/history-import/preview', formData),
+  importHistoryReadings: (formData) => api.post('/readings/history-import', formData),
   batchSave: (items, readingDate) => api.post('/readings/batch', items, {
     params: { readingDate }
   }),
@@ -105,6 +112,16 @@ export const reportApi = {
 }
 
 // ==================== 系统设置 ====================
+export const accountingApi = {
+  healthCheck: () => api.get('/accounting/health-check'),
+  listMonthLocks: () => api.get('/accounting/month-locks'),
+  lockMonth: (data) => api.post('/accounting/month-locks', data),
+  unlockMonth: (params) => api.delete('/accounting/month-locks', { params }),
+  listAdjustments: () => api.get('/accounting/adjustments'),
+  adjustWaterBill: (id, data) => api.post(`/accounting/adjustments/water-bills/${id}`, data),
+  adjustMaterialRecord: (id, data) => api.post(`/accounting/adjustments/material-records/${id}`, data)
+}
+
 export const settingsApi = {
   getInfo: () => api.get('/settings/info'),
   downloadBackup: () => api.get('/settings/backup/download', { responseType: 'blob' }),

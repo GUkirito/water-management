@@ -5,6 +5,7 @@ import com.example.watermanagement.exception.BusinessException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
+import javax.sql.DataSource;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,6 +36,8 @@ import java.util.Map;
 @RequestMapping("/api/settings")
 @RequiredArgsConstructor
 public class SettingsController {
+
+    private final DataSource dataSource;
 
     @Value("${spring.datasource.url}")
     private String datasourceUrl;
@@ -97,6 +100,13 @@ public class SettingsController {
         }
 
         Files.copy(file.getInputStream(), dbFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        if (dataSource instanceof AutoCloseable closeable) {
+            try {
+                closeable.close();
+            } catch (Exception e) {
+                log.warn("Failed to close datasource after restore", e);
+            }
+        }
 
         Map<String, String> result = new HashMap<>();
         result.put("dbFilePath", dbFile.getAbsolutePath());

@@ -5,9 +5,11 @@ import com.alibaba.excel.ExcelReader;
 import com.alibaba.excel.read.metadata.ReadSheet;
 import com.example.watermanagement.dto.MaterialRecordExportRow;
 import com.example.watermanagement.dto.MaterialRecordRequest;
+import com.example.watermanagement.entity.AccountingAdjustment;
 import com.example.watermanagement.entity.MaterialPayment;
 import com.example.watermanagement.entity.MaterialRecord;
 import com.example.watermanagement.exception.BusinessException;
+import com.example.watermanagement.repository.AccountingAdjustmentRepository;
 import com.example.watermanagement.repository.MaterialPaymentRepository;
 import com.example.watermanagement.repository.MaterialRecordRepository;
 import com.example.watermanagement.service.MaterialRecordService;
@@ -34,6 +36,7 @@ public class MaterialRecordServiceImpl implements MaterialRecordService {
 
     private final MaterialRecordRepository recordRepository;
     private final MaterialPaymentRepository paymentRepository;
+    private final AccountingAdjustmentRepository adjustmentRepository;
 
     @Override
     public Page<MaterialRecord> list(String villageName, String status, String keyword,
@@ -89,10 +92,25 @@ public class MaterialRecordServiceImpl implements MaterialRecordService {
         if (request.getPhone() != null) record.setPhone(request.getPhone());
         if (request.getVillageName() != null) record.setVillageName(request.getVillageName());
         if (request.getTotalFee() != null) {
+            if (request.getTotalFee().compareTo(record.getActualPaid()) < 0) {
+                throw new BusinessException("total fee cannot be less than actual paid");
+            }
+            if (request.getTotalFee().compareTo(record.getTotalFee()) != 0) {
+                if (request.getNote() == null || request.getNote().isBlank()) {
+                    throw new BusinessException("材料费金额修正必须填写备注作为调账原因");
+                }
+                adjustmentRepository.save(AccountingAdjustment.builder()
+                        .targetType("MATERIAL_RECORD")
+                        .targetId(record.getId())
+                        .beforeAmount(record.getTotalFee())
+                        .afterAmount(request.getTotalFee())
+                        .reason(request.getNote().trim())
+                        .operator("系统编辑")
+                        .build());
+            }
             record.setTotalFee(request.getTotalFee());
             record.setStatus(calcStatus(record.getActualPaid(), request.getTotalFee()));
         }
-        if (request.getPaidAt() != null) record.setPaidAt(request.getPaidAt());
         if (request.getNote() != null) record.setNote(request.getNote());
         record = recordRepository.save(record);
         log.info("更新材料费记录: id={}", id);

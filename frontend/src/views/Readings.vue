@@ -66,7 +66,9 @@
           </div>
           <div class="wm-toolbar-group">
             <el-button size="small" @click="exportTemplate">导出空白模板</el-button>
+            <el-button size="small" @click="exportHistoryTemplate">历史表底模板</el-button>
             <el-button size="small" type="warning" @click="triggerReadingImport">导入抄表</el-button>
+            <el-button size="small" type="warning" plain @click="triggerHistoryImport">导入历史表底</el-button>
             <el-button size="small" @click="triggerRegisterImport">导入住户</el-button>
           </div>
           <div class="wm-toolbar-spacer"></div>
@@ -74,6 +76,7 @@
         </section>
 
         <input ref="readingImportInput" class="wm-hidden-file-input" type="file" accept=".xlsx" @change="onReadingImportFileChange" />
+        <input ref="historyImportInput" class="wm-hidden-file-input" type="file" accept=".xlsx" @change="onHistoryImportFileChange" />
         <input ref="registerImportInput" class="wm-hidden-file-input" type="file" accept=".xlsx" @change="onRegisterImportFileChange" />
 
         <section class="wm-panel wm-reading-table-panel">
@@ -168,11 +171,20 @@
             </div>
           </div>
           <el-table :data="importResult.details" max-height="400" border size="small">
-            <el-table-column prop="type" label="类型" width="100" />
-            <el-table-column prop="waterMeterId" label="表号" width="120" />
+            <el-table-column prop="index" label="序号" width="70" />
+            <el-table-column prop="householdName" label="户名" width="110" />
+            <el-table-column prop="waterMeterId" label="水表编号" width="130" />
+            <el-table-column prop="villageName" label="村名" width="110" />
+            <el-table-column v-if="importResultMode === 'history'" prop="readingDate" label="抄表日期" width="120" />
+            <el-table-column prop="previousReading" label="上次表底" width="110" align="right" />
+            <el-table-column prop="currentReading" label="本次表底" width="110" align="right" />
+            <el-table-column v-if="importResultMode === 'reading'" prop="waterPrice" label="水价" width="90" align="right" />
+            <el-table-column v-if="importResultMode === 'reading'" prop="waterCharge" label="水费" width="100" align="right" />
+            <el-table-column v-if="importResultMode === 'history'" prop="usageAmount" label="用水量" width="100" align="right" />
             <el-table-column label="结果" width="100">
               <template #default="{ row }">
                 <el-tag v-if="row.status === 'success'" type="success" size="small">成功</el-tag>
+                <el-tag v-else-if="row.status === 'abnormal'" type="warning" size="small">异常</el-tag>
                 <el-tag v-else-if="row.status === 'skip'" type="info" size="small">跳过</el-tag>
                 <el-tag v-else type="danger" size="small">失败</el-tag>
               </template>
@@ -180,6 +192,7 @@
             <el-table-column prop="message" label="说明" min-width="220" show-overflow-tooltip />
           </el-table>
           <template #footer>
+            <el-button v-if="pendingImportFile" type="primary" :loading="confirmingImport" @click="confirmPreviewImport">确认导入</el-button>
             <el-button @click="importResultVisible = false">关闭</el-button>
           </template>
         </el-dialog>
@@ -221,9 +234,14 @@ const tableData = ref([])
 const selectedHouseholdIds = ref([])
 const batchVillage = ref('')
 const readingImportInput = ref(null)
+const historyImportInput = ref(null)
 const registerImportInput = ref(null)
 const importResultVisible = ref(false)
 const importResultTitle = ref('导入结果')
+const importResultMode = ref('reading')
+const pendingImportFile = ref(null)
+const pendingImportMode = ref('')
+const confirmingImport = ref(false)
 const importResult = ref({
   total: 0,
   success: 0,
@@ -489,8 +507,18 @@ function triggerReadingImport() {
   readingImportInput.value?.click()
 }
 
+function triggerHistoryImport() {
+  historyImportInput.value?.click()
+}
+
 function triggerRegisterImport() {
   registerImportInput.value?.click()
+}
+
+function buildImportFormData(file) {
+  const fd = new FormData()
+  fd.append('file', file)
+  return fd
 }
 
 async function onReadingImportFileChange(event) {
@@ -499,23 +527,72 @@ async function onReadingImportFileChange(event) {
   input.value = ''
   if (!file) return
 
-  const fd = new FormData()
-  fd.append('file', file)
+  const fd = buildImportFormData(file)
   fd.append('readingDate', readingDate.value)
   try {
-    const result = await readingApi.importReadings(fd)
-    importResultTitle.value = '抄表导入结果'
+    const result = await readingApi.previewImportReadings(fd)
+    importResultTitle.value = '抄表导入预览'
+    importResultMode.value = 'reading'
     importResult.value = normalizeReadingImportResult(result || {})
+    pendingImportFile.value = file
+    pendingImportMode.value = 'reading'
     importResultVisible.value = true
+    ElMessage.success('预览完成，请确认后导入')
+  } catch (error) {
+    ElMessage.error(error?.message || '抄表数据预览失败')
+  }
+}
+
+async function onHistoryImportFileChange(event) {
+  const input = event.target
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+
+  try {
+    const result = await readingApi.previewHistoryReadings(buildImportFormData(file))
+    importResultTitle.value = '历史表底导入预览'
+    importResultMode.value = 'history'
+    importResult.value = normalizeReadingImportResult(result || {})
+    pendingImportFile.value = file
+    pendingImportMode.value = 'history'
+    importResultVisible.value = true
+    ElMessage.success('预览完成，请确认后导入')
+  } catch (error) {
+    ElMessage.error(error?.message || '历史表底预览失败')
+  }
+}
+
+async function confirmPreviewImport() {
+  if (!pendingImportFile.value) return
+  confirmingImport.value = true
+  try {
+    let result
+    if (pendingImportMode.value === 'history') {
+      result = await readingApi.importHistoryReadings(buildImportFormData(pendingImportFile.value))
+      importResultTitle.value = '历史表底导入结果'
+      importResultMode.value = 'history'
+    } else {
+      const fd = buildImportFormData(pendingImportFile.value)
+      fd.append('readingDate', readingDate.value)
+      result = await readingApi.importReadings(fd)
+      importResultTitle.value = '抄表导入结果'
+      importResultMode.value = 'reading'
+    }
+    importResult.value = normalizeReadingImportResult(result || {})
+    pendingImportFile.value = null
+    pendingImportMode.value = ''
     ElNotification({
-      title: '抄表导入完成',
-      message: `成功 ${importResult.value.success} 条，异常 ${importResult.value.abnormal} 条，失败 ${importResult.value.fail} 条`,
+      title: '导入完成',
+      message: `成功 ${importResult.value.success} 条，异常 ${importResult.value.abnormal} 条，失败 ${importResult.value.fail} 条，跳过 ${importResult.value.skip} 条`,
       type: importResult.value.fail > 0 ? 'warning' : 'success',
       duration: 4000
     })
     await loadTable()
   } catch (error) {
-    ElMessage.error(error?.message || '抄表数据导入失败')
+    ElMessage.error(error?.message || '导入失败')
+  } finally {
+    confirmingImport.value = false
   }
 }
 
@@ -530,6 +607,9 @@ async function onRegisterImportFileChange(event) {
   try {
     const result = await householdApi.importFromRegister(fd)
     importResultTitle.value = '住户导入结果'
+    importResultMode.value = 'register'
+    pendingImportFile.value = null
+    pendingImportMode.value = ''
     importResult.value = normalizeRegisterImportResult(result || {})
     importResultVisible.value = true
     ElNotification({
@@ -547,6 +627,16 @@ async function onRegisterImportFileChange(event) {
 }
 
 function normalizeReadingImportResult(result) {
+  if (Array.isArray(result.details)) {
+    return {
+      total: Number(result.total || result.details.length || 0),
+      success: Number(result.success || 0),
+      fail: Number(result.fail || 0),
+      skip: Number(result.skip || 0),
+      abnormal: Number(result.abnormal || 0),
+      details: result.details
+    }
+  }
   const errors = Array.isArray(result.errors) ? result.errors : []
   const success = Number(result.total || 0)
   const abnormal = Number(result.abnormal || 0)
@@ -658,6 +748,20 @@ async function batchSave() {
   } catch {} finally {
     saving.value = false
   }
+}
+
+async function exportHistoryTemplate() {
+  const params = {}
+  if (selectedVillage.value) params.villageNames = selectedVillage.value
+  try {
+    const blob = await readingApi.exportHistoryTemplate(params)
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = '历史抄表模板.xlsx'
+    a.click()
+    URL.revokeObjectURL(a.href)
+    ElMessage.success('历史表底模板已下载')
+  } catch {}
 }
 
 onMounted(async () => {

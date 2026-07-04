@@ -41,6 +41,23 @@ public class ReadingController {
         readingService.exportTemplate(villageNames, response);
     }
 
+    @Operation(summary = "导出历史抄表模板", description = "用于导入历史表底或初始化读数，默认不生成历史账单")
+    @GetMapping("/history-template")
+    public void exportHistoricalTemplate(
+            @Parameter(description = "村名列表（多选）") @RequestParam(required = false) List<String> villageNames,
+            HttpServletResponse response) throws IOException {
+        readingService.exportHistoricalTemplate(villageNames, response);
+    }
+
+    @Operation(summary = "预览抄表导入", description = "只解析和校验 Excel，不写入数据库")
+    @PostMapping("/import/preview")
+    public ApiResponse<Map<String, Object>> previewImportReadings(
+            @Parameter(description = "抄表日期（yyyy-MM-dd）") @RequestParam String readingDate,
+            @Parameter(description = "Excel 文件") @RequestParam("file") MultipartFile file) throws IOException {
+        LocalDate date = LocalDate.parse(readingDate);
+        return ApiResponse.ok("预览完成", readingService.previewImportReadings(file.getInputStream(), date));
+    }
+
     @Operation(summary = "导入已填写的抄表模板",
             description = "上传已填写的 Excel，自动计算用量、检测异常、生成水费账单")
     @PostMapping("/import")
@@ -50,6 +67,20 @@ public class ReadingController {
         LocalDate date = LocalDate.parse(readingDate);
         Map<String, Object> result = readingService.importReadings(file.getInputStream(), date);
         return ApiResponse.ok("导入完成", result);
+    }
+
+    @Operation(summary = "预览历史抄表导入", description = "只解析历史表底 Excel，不写入数据库")
+    @PostMapping("/history-import/preview")
+    public ApiResponse<Map<String, Object>> previewHistoricalReadings(
+            @Parameter(description = "Excel 文件") @RequestParam("file") MultipartFile file) throws IOException {
+        return ApiResponse.ok("预览完成", readingService.previewHistoricalReadings(file.getInputStream()));
+    }
+
+    @Operation(summary = "导入历史抄表", description = "只写历史 readings，不生成 water_bills")
+    @PostMapping("/history-import")
+    public ApiResponse<Map<String, Object>> importHistoricalReadings(
+            @Parameter(description = "Excel 文件") @RequestParam("file") MultipartFile file) throws IOException {
+        return ApiResponse.ok("导入完成", readingService.importHistoricalReadings(file.getInputStream()));
     }
 
     @Operation(summary = "按日期和村名查询抄表数据",

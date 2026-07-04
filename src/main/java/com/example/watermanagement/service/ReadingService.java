@@ -23,6 +23,16 @@ public interface ReadingService {
     void exportTemplate(List<String> villageNames, HttpServletResponse response) throws IOException;
 
     /**
+     * 导出历史抄表导入模板。
+     */
+    void exportHistoricalTemplate(List<String> villageNames, HttpServletResponse response) throws IOException;
+
+    /**
+     * 预览普通抄表导入，不写入数据库。
+     */
+    Map<String, Object> previewImportReadings(InputStream inputStream, LocalDate readingDate);
+
+    /**
      * 导入已填写的抄表模板，自动计算用量、检测异常、生成水费账单
      *
      * @param inputStream Excel 文件流
@@ -30,6 +40,16 @@ public interface ReadingService {
      * @return 导入结果 {"total": 成功条数, "abnormal": 异常条数, "errors": 错误列表}
      */
     Map<String, Object> importReadings(InputStream inputStream, LocalDate readingDate);
+
+    /**
+     * 预览历史抄表导入，不写入数据库。
+     */
+    Map<String, Object> previewHistoricalReadings(InputStream inputStream);
+
+    /**
+     * 导入历史抄表，只写 readings，不生成 water_bills。
+     */
+    Map<String, Object> importHistoricalReadings(InputStream inputStream);
 
     /**
      * 批量保存表底数据

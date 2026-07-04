@@ -21,7 +21,9 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 @Entity
-@Table(name = "water_bills")
+@Table(name = "water_bills", uniqueConstraints = {
+        @UniqueConstraint(columnNames = {"water_meter_id", "bill_year", "bill_month"})
+})
 public class WaterBill {
 
     @Id

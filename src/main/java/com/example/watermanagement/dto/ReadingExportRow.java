@@ -19,31 +19,35 @@ import java.math.BigDecimal;
 @Builder
 public class ReadingExportRow {
 
-    /** 水表编号 */
-    @ExcelProperty("水表编号")
-    private String waterMeterId;
+    /** 序号 */
+    @ExcelProperty(value = "序号", index = 0)
+    private Integer index;
 
     /** 户名 */
-    @ExcelProperty("户名")
+    @ExcelProperty(value = "户名", index = 1)
     private String householdName;
 
+    /** 水表编号 */
+    @ExcelProperty(value = "水表编号", index = 2)
+    private String waterMeterId;
+
     /** 所属村名 */
-    @ExcelProperty("村名")
+    @ExcelProperty(value = "村名", index = 3)
     private String villageName;
 
     /** 上次表底（上月读数） */
-    @ExcelProperty("上次表底")
+    @ExcelProperty(value = "上次表底", index = 4)
     private BigDecimal previousReading;
 
     /** 本次表底（抄表员填写） */
-    @ExcelProperty("本次表底")
+    @ExcelProperty(value = "本次表底", index = 5)
     private BigDecimal currentReading;
 
     /** 水价（元/吨） */
-    @ExcelProperty("水价")
+    @ExcelProperty(value = "水价", index = 6)
     private BigDecimal waterPrice;
 
     /** 水费（用水量 x 水价，模板中为空） */
-    @ExcelProperty("水费")
+    @ExcelProperty(value = "水费", index = 7)
     private BigDecimal waterCharge;
 }
