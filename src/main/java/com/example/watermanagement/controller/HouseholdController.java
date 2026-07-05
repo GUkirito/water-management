@@ -75,6 +75,9 @@ public class HouseholdController {
     @Operation(summary = "批量删除村民")
     @PostMapping("/batch-delete")
     public ApiResponse<Void> batchDelete(@RequestBody Map<String, List<Long>> body) {
+        if (body.get("ids") == null || body.get("ids").isEmpty()) {
+            return ApiResponse.fail("参数 ids 不能为空");
+        }
         householdService.batchDelete(body.get("ids"));
         return ApiResponse.ok("批量删除成功", null);
     }
@@ -94,8 +97,12 @@ public class HouseholdController {
     @Operation(summary = "批量修改村民的村组名称")
     @PutMapping("/batch-update-village")
     public ApiResponse<Void> batchUpdateVillage(@RequestBody Map<String, Object> body) {
+        if (!(body.get("ids") instanceof List<?> rawIds) || rawIds.isEmpty()
+                || body.get("villageName") == null || body.get("villageName").toString().isBlank()) {
+            return ApiResponse.fail("参数 ids 和 villageName 不能为空");
+        }
         @SuppressWarnings("unchecked")
-        List<Long> ids = ((List<Number>) body.get("ids")).stream()
+        List<Long> ids = ((List<Number>) rawIds).stream()
                 .map(Number::longValue).toList();
         String villageName = body.get("villageName").toString();
         householdService.batchUpdateVillage(ids, villageName);

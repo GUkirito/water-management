@@ -314,9 +314,14 @@ async function unlockMonth(row) {
   } catch {
     return
   }
-  await accountingApi.unlockMonth({ billYear: row.billYear, billMonth: row.billMonth })
-  ElMessage.success('已解除月结锁定')
-  await loadAccountingControls()
+  try {
+    await accountingApi.unlockMonth({ billYear: row.billYear, billMonth: row.billMonth })
+    ElMessage.success('已解除月结锁定')
+    await loadAccountingControls()
+  } catch (error) {
+    ElMessage.error('解除月结锁定失败')
+    console.warn('解除月结锁定失败', error)
+  }
 }
 
 async function submitAdjustment() {
@@ -351,16 +356,21 @@ onMounted(async () => {
     const config = await readingApi.getConfig()
     waterPrice.value = config.waterPrice || 1.8
     threshold.value = config.abnormalThreshold || 100
-  } catch {}
+  } catch (error) {
+    console.warn('加载系统配置失败', error)
+  }
   try {
     const info = await settingsApi.getInfo()
     dbFilePath.value = info.dbFilePath || '未知'
-  } catch {
+  } catch (error) {
+    console.warn('加载系统信息失败', error)
     dbFilePath.value = '未知'
   }
   try {
     await loadAccountingControls()
-  } catch {}
+  } catch (error) {
+    console.warn('加载账务控制数据失败', error)
+  }
 })
 </script>
 

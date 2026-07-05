@@ -141,7 +141,7 @@
 </template>
 
 <script setup>
-import { reactive, ref, onMounted, computed } from 'vue'
+import { reactive, ref, onBeforeUnmount, onMounted, computed } from 'vue'
 import { householdApi, reportApi, readingApi, materialRecordApi } from '@/api'
 
 const statsLoading = ref(true)
@@ -177,13 +177,15 @@ const overallRateColor = computed(() => rateColor(Number(overallCollectionRate.v
 const waterRateColor = computed(() => rateColor(Number(stats.collectionRate)))
 const materialRateColor = computed(() => rateColor(Number(matStats.collectionRate)))
 
-onMounted(async () => {
+async function loadDashboard() {
   statsLoading.value = true
   try {
     try {
       const result = await householdApi.list({ page: 0, size: 1 })
       stats.totalHouseholds = result?.totalElements || 0
-    } catch {}
+    } catch (error) {
+      console.warn('加载户数统计失败', error)
+    }
 
     const now = new Date()
     try {
@@ -202,7 +204,9 @@ onMounted(async () => {
         stats.monthlyPaid = paid.toFixed(2)
         stats.collectionRate = charge > 0 ? ((paid / charge) * 100).toFixed(1) : '0.0'
       }
-    } catch {}
+    } catch (error) {
+      console.warn('加载水费统计失败', error)
+    }
 
     try {
       const matResult = await materialRecordApi.list({ page: 0, size: 10000 })
@@ -216,12 +220,16 @@ onMounted(async () => {
       matStats.totalFee = totalFee.toFixed(2)
       matStats.totalPaid = totalPaid.toFixed(2)
       matStats.collectionRate = totalFee > 0 ? ((totalPaid / totalFee) * 100).toFixed(1) : '100.0'
-    } catch {}
+    } catch (error) {
+      console.warn('加载材料费统计失败', error)
+    }
 
     try {
       const abnormal = await readingApi.getAbnormal({ limit: 20 })
       abnormalReadings.value = abnormal || []
-    } catch {}
+    } catch (error) {
+      console.warn('加载异常抄表失败', error)
+    }
 
     try {
       const summary = await reportApi.getVillageCollectionSummary({
@@ -229,10 +237,21 @@ onMounted(async () => {
         month: now.getMonth() + 1
       })
       villageSummary.value = summary || []
-    } catch {}
+    } catch (error) {
+      console.warn('加载村组收缴进度失败', error)
+    }
   } finally {
     statsLoading.value = false
   }
+}
+
+onMounted(() => {
+  loadDashboard()
+  window.addEventListener('wm-refresh', loadDashboard)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('wm-refresh', loadDashboard)
 })
 </script>
 

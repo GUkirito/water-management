@@ -26,6 +26,7 @@
             </el-select>
             <el-button type="primary" @click="loadWaterReport" :loading="waterLoading">查询</el-button>
             <el-button type="success" @click="exportWaterReport">导出 Excel</el-button>
+            <el-button @click="printPage">打印</el-button>
           </div>
 
           <!-- 水费汇总卡片 -->
@@ -99,6 +100,7 @@
             <el-button type="primary" @click="loadMaterialReport" :loading="matLoading">查询</el-button>
             <el-button @click="resetMaterialFilter">重置</el-button>
             <el-button type="success" @click="exportMaterialReport">导出 Excel</el-button>
+            <el-button @click="printPage">打印</el-button>
           </div>
 
           <!-- 材料费汇总卡片 -->
@@ -159,7 +161,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onBeforeUnmount, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { householdApi, reportApi, materialRecordApi } from '@/api'
 
@@ -187,7 +189,24 @@ let matVillageLoaded = false
 onMounted(async () => {
   await loadWaterVillages()
   await loadWaterReport()
+  window.addEventListener('wm-refresh', refreshCurrentReport)
 })
+
+onBeforeUnmount(() => {
+  window.removeEventListener('wm-refresh', refreshCurrentReport)
+})
+
+function refreshCurrentReport() {
+  if (activeTab.value === 'water') {
+    loadWaterReport()
+  } else {
+    loadMaterialReport()
+  }
+}
+
+function printPage() {
+  window.print()
+}
 
 async function onTabChange(tab) {
   if (tab === 'material' && !matVillageLoaded) {
@@ -202,7 +221,10 @@ async function loadWaterVillages() {
     const result = await householdApi.list({ page: 0, size: 10000 })
     const list = result?.content || []
     waterVillageList.value = [...new Set(list.map(h => h.villageName).filter(Boolean))].sort()
-  } catch { waterVillageList.value = [] }
+  } catch (error) {
+    console.warn('加载水费报表村组失败', error)
+    waterVillageList.value = []
+  }
 }
 
 // 材料费 Tab 的村组：从材料费表自身聚合
@@ -212,7 +234,10 @@ async function loadMatVillages() {
     const list = result?.content || []
     matVillageList.value = [...new Set(list.map(r => r.villageName).filter(Boolean))].sort()
     matVillageLoaded = true
-  } catch { matVillageList.value = [] }
+  } catch (error) {
+    console.warn('加载材料费报表村组失败', error)
+    matVillageList.value = []
+  }
 }
 
 function tagType(status) {
@@ -233,6 +258,9 @@ async function loadWaterReport() {
   try {
     waterData.value = await reportApi.getWaterBillReport(params) || []
     computeWaterStats()
+  } catch (error) {
+    ElMessage.error('加载水费报表失败')
+    console.warn('加载水费报表失败', error)
   } finally { waterLoading.value = false }
 }
 
@@ -254,9 +282,14 @@ async function exportWaterReport() {
   const [y, m] = waterMonth.value.split('-')
   const params = { year: parseInt(y), month: parseInt(m) }
   if (waterVillages.value.length) params.villageNames = waterVillages.value
-  const blob = await reportApi.exportWaterBillReport(params)
-  downloadBlob(blob, `${y}年${m}月水费报表.xlsx`)
-  ElMessage.success('导出成功')
+  try {
+    const blob = await reportApi.exportWaterBillReport(params)
+    downloadBlob(blob, `${y}年${m}月水费报表.xlsx`)
+    ElMessage.success('导出成功')
+  } catch (error) {
+    ElMessage.error('导出水费报表失败')
+    console.warn('导出水费报表失败', error)
+  }
 }
 
 // ===== 材料费报表 =====
@@ -285,6 +318,9 @@ async function loadMaterialReport() {
       status: r.status
     }))
     computeMatStats()
+  } catch (error) {
+    ElMessage.error('加载材料费统计失败')
+    console.warn('加载材料费统计失败', error)
   } finally { matLoading.value = false }
 }
 
@@ -319,9 +355,14 @@ async function exportMaterialReport() {
     params.paidDateFrom = matDateRange.value[0]
     params.paidDateTo = matDateRange.value[1]
   }
-  const blob = await materialRecordApi.exportExcel(params)
-  downloadBlob(blob, '材料费统计表.xlsx')
-  ElMessage.success('导出成功')
+  try {
+    const blob = await materialRecordApi.exportExcel(params)
+    downloadBlob(blob, '材料费统计表.xlsx')
+    ElMessage.success('导出成功')
+  } catch (error) {
+    ElMessage.error('导出材料费统计失败')
+    console.warn('导出材料费统计失败', error)
+  }
 }
 
 function downloadBlob(blob, filename) {

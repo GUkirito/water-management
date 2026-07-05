@@ -135,7 +135,13 @@
               <el-table-column prop="abnormalReason" label="异常原因" min-width="140" show-overflow-tooltip />
             </el-table>
 
-            <el-empty v-else description="请选择左侧村组开始录入抄表" :image-size="84" class="wm-empty" />
+            <el-empty v-else :image-size="84" class="wm-empty">
+              <template #description>
+                <p class="text-gray-500 text-sm">请选择左侧村组开始录入抄表</p>
+                <p class="text-gray-400 text-xs mt-1">没有住户时可先新增第一个住户</p>
+              </template>
+              <el-button type="primary" @click="addNewHousehold">新增住户</el-button>
+            </el-empty>
 
             <div v-if="tableData.length > 0 || selectedVillage !== ''" class="wm-reading-pagination">
               <el-pagination v-model:current-page="tablePage" v-model:page-size="tablePageSize" :page-sizes="[10,20,50,100]" :total="filteredTableData.length" layout="total,sizes,prev,pager,next" size="small" />
@@ -303,7 +309,9 @@ async function loadAllVillages() {
   try {
     const r = await householdApi.list({ page: 0, size: 10000 })
     allVillages.value = [...new Set((r?.content || []).map(h => h.villageName).filter(Boolean))].sort()
-  } catch {}
+  } catch (error) {
+    console.warn('加载村组失败', error)
+  }
 }
 
 async function loadHouseholdList() {
@@ -312,7 +320,8 @@ async function loadHouseholdList() {
     if (selectedVillage.value) params.villageNames = selectedVillage.value
     const r = await householdApi.list(params)
     householdList.value = r?.content || []
-  } catch {
+  } catch (error) {
+    console.warn('加载住户列表失败', error)
     householdList.value = []
   }
 }
@@ -358,7 +367,10 @@ async function saveHousehold() {
     loadHouseholdList()
     loadTable()
     loadAllVillages()
-  } catch {} finally {
+  } catch (error) {
+    ElMessage.error('保存住户失败')
+    console.warn('保存住户失败', error)
+  } finally {
     savingHousehold.value = false
   }
 }
@@ -377,7 +389,10 @@ async function deleteHousehold() {
     loadHouseholdList()
     loadTable()
     loadAllVillages()
-  } catch {}
+  } catch (error) {
+    ElMessage.error('删除住户失败')
+    console.warn('删除住户失败', error)
+  }
 }
 
 async function loadTable() {
@@ -387,7 +402,8 @@ async function loadTable() {
     if (selectedVillage.value) params.villageNames = selectedVillage.value
     const r = await householdApi.list(params)
     households = r?.content || []
-  } catch {
+  } catch (error) {
+    console.warn('加载抄表住户失败', error)
     households = []
   }
 
@@ -395,7 +411,9 @@ async function loadTable() {
   try {
     const readings = await readingApi.getByDate({ readingDate: readingDate.value, villageName: selectedVillage.value })
     if (readings?.length) readings.forEach(r => { readingsMap[r.waterMeterId] = r })
-  } catch {}
+  } catch (error) {
+    console.warn('加载当天抄表记录失败', error)
+  }
 
   tableData.value = households.map(h => {
     const r = readingsMap[h.waterMeterId]
@@ -445,13 +463,24 @@ function onSelectionChange(rows) {
 async function applyBatchVillage() {
   if (!batchVillage.value || !selectedHouseholdIds.value.length) return
   try {
+    await ElMessageBox.confirm(
+      `确认将选中的 ${selectedHouseholdIds.value.length} 户移动到「${batchVillage.value}」吗？`,
+      '确认批量改村',
+      { type: 'warning' }
+    )
     await householdApi.batchUpdateVillage(selectedHouseholdIds.value, batchVillage.value)
     ElMessage.success(`已更新 ${selectedHouseholdIds.value.length} 户到 ${batchVillage.value}`)
     batchVillage.value = ''
-    loadTable()
-    loadHouseholdList()
-    loadAllVillages()
-  } catch {}
+    await Promise.all([loadTable(), loadHouseholdList(), loadAllVillages()])
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error('批量改村失败')
+  }
+}
+
+function refreshReadingsPage() {
+  loadTable()
+  loadHouseholdList()
+  loadAllVillages()
 }
 
 async function batchDeleteHouseholds() {
@@ -474,7 +503,10 @@ async function batchDeleteHouseholds() {
     loadTable()
     loadHouseholdList()
     loadAllVillages()
-  } catch {}
+  } catch (error) {
+    ElMessage.error('批量删除失败')
+    console.warn('批量删除住户失败', error)
+  }
 }
 
 function calcRow(row) {
@@ -716,7 +748,10 @@ async function exportTemplate() {
     a.click()
     URL.revokeObjectURL(a.href)
     ElMessage.success('模板已下载')
-  } catch {}
+  } catch (error) {
+    ElMessage.error('模板下载失败')
+    console.warn('下载抄表模板失败', error)
+  }
 }
 
 async function batchSave() {
@@ -745,7 +780,10 @@ async function batchSave() {
       duration: 3000
     })
     loadTable()
-  } catch {} finally {
+  } catch (error) {
+    ElMessage.error('批量保存失败')
+    console.warn('批量保存抄表失败', error)
+  } finally {
     saving.value = false
   }
 }
@@ -761,7 +799,10 @@ async function exportHistoryTemplate() {
     a.click()
     URL.revokeObjectURL(a.href)
     ElMessage.success('历史表底模板已下载')
-  } catch {}
+  } catch (error) {
+    ElMessage.error('历史表底模板下载失败')
+    console.warn('下载历史表底模板失败', error)
+  }
 }
 
 onMounted(async () => {
@@ -769,10 +810,14 @@ onMounted(async () => {
     const c = await readingApi.getConfig()
     waterPrice.value = c.waterPrice || 1.8
     abnormalThreshold.value = c.abnormalThreshold || 100
-  } catch {}
+  } catch (error) {
+    console.warn('加载抄表配置失败', error)
+  }
   await loadAllVillages()
   nextTick(updateTableHeight)
   window.addEventListener('resize', updateTableHeight, { passive: true })
+  window.addEventListener('wm-refresh', refreshReadingsPage)
+  window.addEventListener('wm-new', addNewHousehold)
 })
 
 watch([selectedVillage, tablePage, tablePageSize], () => {
@@ -781,6 +826,8 @@ watch([selectedVillage, tablePage, tablePageSize], () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', updateTableHeight)
+  window.removeEventListener('wm-refresh', refreshReadingsPage)
+  window.removeEventListener('wm-new', addNewHousehold)
 })
 </script>
 

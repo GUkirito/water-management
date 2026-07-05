@@ -46,7 +46,7 @@
       </el-menu>
 
       <div class="wm-sidebar-version">
-        <span>v1.6.7</span>
+        <span>v1.7.0</span>
       </div>
     </el-aside>
 
@@ -88,7 +88,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onBeforeUnmount, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { DataAnalysis, EditPen, Money, Coin, Document, Setting, Fold, Expand } from '@element-plus/icons-vue'
 
@@ -98,6 +98,40 @@ const activeMenu = computed(() => route.path)
 const currentTitle = computed(() => route.meta?.title || '')
 const contentClass = computed(() => ['wm-content', route.path === '/readings' ? 'wm-content--readings' : ''])
 const topbarClass = computed(() => ['wm-topbar', route.path === '/readings' ? 'wm-topbar--compact' : ''])
+
+function dispatchShortcut(name) {
+  window.dispatchEvent(new CustomEvent(`wm-${name}`))
+}
+
+function focusFirstInput() {
+  const input = Array.from(document.querySelectorAll('.wm-content input:not([disabled]), .wm-content textarea:not([disabled])'))
+    .find((element) => element.offsetParent !== null)
+  input?.focus()
+  input?.select?.()
+}
+
+function handleKeydown(event) {
+  if (event.key === 'F5') {
+    event.preventDefault()
+    dispatchShortcut('refresh')
+    return
+  }
+
+  if (event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 'n') {
+    event.preventDefault()
+    dispatchShortcut('new')
+    return
+  }
+
+  if (event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 'f') {
+    event.preventDefault()
+    dispatchShortcut('focus-search')
+    requestAnimationFrame(focusFirstInput)
+  }
+}
+
+onMounted(() => window.addEventListener('keydown', handleKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
 </script>
 
 <style scoped>

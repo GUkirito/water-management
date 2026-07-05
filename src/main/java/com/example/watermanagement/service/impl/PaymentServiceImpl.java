@@ -133,6 +133,9 @@ public class PaymentServiceImpl implements PaymentService {
         BigDecimal totalDue = bills.stream()
                 .map(b -> b.getWaterCharge().subtract(b.getActualWaterPaid()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (totalDue.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessException("所选账单均已缴清，无需重复缴费");
+        }
 
         log.info("水费合并缴费: {} 个月份, 总欠费={}元, 实收={}元",
                 bills.size(), totalDue, request.getAmount());

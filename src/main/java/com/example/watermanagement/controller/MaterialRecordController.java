@@ -70,6 +70,9 @@ public class MaterialRecordController {
 
     @PostMapping("/batch-delete")
     public ApiResponse<Void> batchDelete(@RequestBody Map<String, List<Long>> body) {
+        if (body.get("ids") == null || body.get("ids").isEmpty()) {
+            return ApiResponse.fail("参数 ids 不能为空");
+        }
         recordService.batchDelete(body.get("ids"));
         return ApiResponse.ok("批量删除成功", null);
     }
@@ -97,6 +100,9 @@ public class MaterialRecordController {
     public ApiResponse<MaterialPayment> collect(
             @PathVariable Long id,
             @RequestBody Map<String, Object> body) {
+        if (body.get("amount") == null || body.get("paidDate") == null) {
+            return ApiResponse.fail("参数 amount 和 paidDate 不能为空");
+        }
         BigDecimal amount = new BigDecimal(body.get("amount").toString());
         LocalDate paidDate = LocalDate.parse(body.get("paidDate").toString());
         String collector = body.get("collector") != null ? body.get("collector").toString() : "管理员";

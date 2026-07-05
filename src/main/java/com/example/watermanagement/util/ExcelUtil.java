@@ -81,6 +81,8 @@ public class ExcelUtil {
     public static <T> List<T> read(InputStream inputStream, Class<T> head) {
         List<T> result = new ArrayList<>();
         EasyExcel.read(inputStream, head, new ReadListener<T>() {
+            private Exception lastException;
+
             @Override
             public void invoke(T data, AnalysisContext context) {
                 result.add(data);
@@ -88,12 +90,16 @@ public class ExcelUtil {
 
             @Override
             public void doAfterAllAnalysed(AnalysisContext context) {
+                if (lastException != null) {
+                    throw new RuntimeException("Excel 解析失败: " + lastException.getMessage(), lastException);
+                }
                 log.info("Excel 读取完成，共 {} 条数据", result.size());
             }
 
             @Override
             public void onException(Exception e, AnalysisContext context) {
                 log.error("Excel 解析异常: {}", e.getMessage(), e);
+                lastException = e;
             }
         }).sheet().doRead();
         return result;

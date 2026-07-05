@@ -13,8 +13,14 @@ spring:
   # ---- 数据库配置 (SQLite) ----
   datasource:
     # 使用用户目录存储数据库，避免安装到 Program Files 时无写入权限
-    url: jdbc:sqlite:${user.home}/.water-management/data/water_meter.db
+    url: jdbc:sqlite:${user.home}/.water-management/data/water_meter.db?journal_mode=WAL&busy_timeout=5000&synchronous=NORMAL&foreign_keys=on
     driver-class-name: org.sqlite.JDBC       # SQLite 驱动类
+    hikari:
+      maximum-pool-size: 1
+      minimum-idle: 1
+      connection-timeout: 10000
+      keepalive-time: 30000
+      connection-test-query: SELECT 1
 
   # ---- JPA 配置 ----
   jpa:

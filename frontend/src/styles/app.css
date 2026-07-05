@@ -18,6 +18,20 @@
   --wm-shadow-soft: 0 8px 22px rgba(8, 47, 73, 0.06);
 }
 
+html.dark {
+  --wm-bg: #0b1220;
+  --wm-surface: #111827;
+  --wm-surface-2: #172033;
+  --wm-border: #263244;
+  --wm-text: #e5edf7;
+  --wm-text-2: #aebbd0;
+  --wm-text-3: #748198;
+  --wm-primary-light: #102b3d;
+  --wm-shadow: 0 14px 38px rgba(0, 0, 0, 0.28);
+  --wm-shadow-soft: 0 8px 22px rgba(0, 0, 0, 0.22);
+  color-scheme: dark;
+}
+
 html {
   scroll-behavior: smooth;
 }
@@ -37,6 +51,12 @@ body {
   min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+html.dark body {
+  background:
+    radial-gradient(circle at 18px 18px, rgba(56, 189, 248, 0.05) 1px, transparent 1px),
+    linear-gradient(180deg, #101826 0%, var(--wm-bg) 58%, #090f1a 100%);
 }
 
 * {
@@ -73,6 +93,19 @@ a {
   border: 1px solid var(--wm-border);
   border-radius: 16px;
   box-shadow: var(--wm-shadow-soft);
+}
+
+html.dark .wm-page-header,
+html.dark .wm-toolbar,
+html.dark .wm-topbar,
+html.dark .wm-mobile-brand,
+html.dark .wm-drawer-summary {
+  background: rgba(17, 24, 39, 0.88);
+  border-color: var(--wm-border);
+}
+
+html.dark .wm-stat-card {
+  background: linear-gradient(180deg, #111827 0%, #172033 100%);
 }
 
 .wm-page-title {
@@ -241,6 +274,10 @@ a {
   --el-table-tr-bg-color: #fff7ed;
 }
 
+html.dark .row-abnormal {
+  --el-table-tr-bg-color: #342315;
+}
+
 .el-button,
 .el-input__wrapper,
 .el-select__wrapper,
@@ -309,6 +346,13 @@ a {
   --el-table-text-color: var(--wm-text);
   border-radius: 10px;
   overflow: hidden;
+}
+
+html.dark .el-table {
+  --el-table-header-bg-color: #172033;
+  --el-table-row-hover-bg-color: #102b3d;
+  --el-table-header-text-color: #bae6fd;
+  --el-table-text-color: var(--wm-text);
 }
 
 body .el-table td.el-table__cell,
@@ -381,6 +425,10 @@ body .el-pagination {
 .el-table .el-table__body tr:hover > td {
   background-color: #eaf7fd !important;
   cursor: pointer;
+}
+
+html.dark .el-table .el-table__body tr:hover > td {
+  background-color: #102b3d !important;
 }
 
 .el-table .el-table__body tr.current-row > td {
@@ -521,4 +569,44 @@ body .el-pagination {
   margin-top: 4px;
   color: var(--wm-text-2);
   font-size: 12px;
+}
+
+@media print {
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .wm-sidebar,
+  .wm-topbar,
+  .wm-mobile-brand,
+  .wm-toolbar,
+  .wm-table-actions,
+  .el-button,
+  .el-pagination {
+    display: none !important;
+  }
+
+  .wm-content,
+  .wm-content--readings {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+
+  .wm-page,
+  .wm-page-shell,
+  .wm-panel {
+    max-width: none !important;
+    box-shadow: none !important;
+    border-color: #ddd !important;
+  }
+
+  .wm-page-header,
+  .wm-panel,
+  .wm-stat-card {
+    break-inside: avoid;
+  }
 }

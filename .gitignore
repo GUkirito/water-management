@@ -40,6 +40,8 @@ data/
 frontend/node_modules/
 frontend/dist/
 src-tauri/target/
+.tauri/
+*.pem
 
 ### Logs ###
 logs/
@@ -50,3 +52,5 @@ installer/
 ### OS ###
 .DS_Store
 Thumbs.db
+
+build-tauri.bat

@@ -178,7 +178,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onBeforeUnmount, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { householdApi, materialRecordApi } from '@/api'
@@ -222,9 +222,20 @@ async function loadVillages() {
   try {
     const r = await materialRecordApi.list({ page: 0, size: 10000 })
     villageList.value = [...new Set((r?.content || []).map(x => x.villageName).filter(Boolean))].sort()
-  } catch {}
+  } catch (error) {
+    console.warn('加载材料费村组失败', error)
+  }
 }
-onMounted(loadVillages)
+onMounted(() => {
+  loadVillages()
+  window.addEventListener('wm-refresh', loadData)
+  window.addEventListener('wm-new', handleCreate)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('wm-refresh', loadData)
+  window.removeEventListener('wm-new', handleCreate)
+})
 
 async function loadData() {
   loading.value = true
@@ -240,7 +251,10 @@ async function loadData() {
     const r = await materialRecordApi.list(p)
     tableData.value = r?.content || []
     total.value = r?.totalElements || 0
-  } catch {} finally {
+  } catch (error) {
+    ElMessage.error('加载材料费列表失败')
+    console.warn('加载材料费列表失败', error)
+  } finally {
     loading.value = false
   }
 }
@@ -304,7 +318,10 @@ async function saveForm() {
     formVisible.value = false
     await loadData()
     await loadVillages()
-  } catch {} finally {
+  } catch (error) {
+    ElMessage.error('保存材料费失败')
+    console.warn('保存材料费失败', error)
+  } finally {
     savingForm.value = false
   }
 }
@@ -316,7 +333,10 @@ async function handleDelete(row) {
     ElMessage.success('已删除')
     await loadData()
     await loadVillages()
-  } catch {}
+  } catch (error) {
+    ElMessage.error('删除材料费失败')
+    console.warn('删除材料费失败', error)
+  }
 }
 
 async function handleBatchDelete() {
@@ -328,7 +348,10 @@ async function handleBatchDelete() {
     selectedRows.value = []
     await loadData()
     await loadVillages()
-  } catch {}
+  } catch (error) {
+    ElMessage.error('批量删除失败')
+    console.warn('批量删除材料费失败', error)
+  }
 }
 
 function triggerMaterialImport() {
@@ -410,7 +433,10 @@ async function exportExcel() {
     a.click()
     URL.revokeObjectURL(a.href)
     ElMessage.success('导出成功')
-  } catch {}
+  } catch (error) {
+    ElMessage.error('导出失败')
+    console.warn('导出材料费失败', error)
+  }
 }
 
 function openCollectDialog(row) {
@@ -448,7 +474,10 @@ async function doCollect() {
     })
     collectVisible.value = false
     await loadData()
-  } catch {} finally {
+  } catch (error) {
+    ElMessage.error('收费失败')
+    console.warn('材料费收费失败', error)
+  } finally {
     collecting.value = false
   }
 }
@@ -493,10 +522,11 @@ async function handleBatchCollect() {
     }
   }
 
+  const failCount = rows.length - successCount
   ElNotification({
     title: '收费完成',
-    message: `成功收费 ${successCount} 户，失败 ${rows.length - successCount} 户`,
-    type: 'success',
+    message: `成功收费 ${successCount} 户，失败 ${failCount} 户`,
+    type: failCount > 0 ? 'warning' : 'success',
     duration: 4000
   })
   selectedRows.value = []

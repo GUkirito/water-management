@@ -24,6 +24,7 @@
       <el-radio-group v-model="billType" @change="loadPendingBills">
         <el-radio-button value="water">水费</el-radio-button>
       </el-radio-group>
+      <el-button v-if="selectedMeter" @click="printPage">打印</el-button>
       <el-button v-if="selectedMeter" link type="primary" @click="openHistory">查看缴费历史</el-button>
     </section>
 
@@ -216,7 +217,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, nextTick, onMounted } from 'vue'
+import { ref, reactive, computed, nextTick, onBeforeUnmount, onMounted } from 'vue'
 import { ElMessage, ElNotification } from 'element-plus'
 import { householdApi, paymentApi } from '@/api'
 
@@ -255,10 +256,20 @@ const listTotalDue = computed(() =>
 )
 
 onMounted(async () => {
-  const result = await householdApi.list({ page: 0, size: 10000 })
-  households.value = result?.content || []
-  allVillages.value = [...new Set(households.value.map(h => h.villageName).filter(Boolean))].sort()
+  try {
+    const result = await householdApi.list({ page: 0, size: 10000 })
+    households.value = result?.content || []
+    allVillages.value = [...new Set(households.value.map(h => h.villageName).filter(Boolean))].sort()
+  } catch (error) {
+    ElMessage.error('加载住户失败')
+    console.warn('加载缴费住户失败', error)
+  }
   loadPendingBillRows()
+  window.addEventListener('wm-refresh', refreshBillingPage)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('wm-refresh', refreshBillingPage)
 })
 
 async function loadPendingBillRows() {
@@ -270,6 +281,9 @@ async function loadPendingBillRows() {
     if (pendingFilters.billYear) params.billYear = pendingFilters.billYear
     if (pendingFilters.billMonth) params.billMonth = pendingFilters.billMonth
     pendingBillRows.value = await paymentApi.listPendingWater(params) || []
+  } catch (error) {
+    ElMessage.error('加载未缴账单失败')
+    console.warn('加载未缴账单列表失败', error)
   } finally {
     pendingListLoading.value = false
   }
@@ -290,24 +304,41 @@ async function loadPendingBills(preselectBillId = null) {
     prepaymentBalance.value = 0
     return
   }
-  const [bills, balance] = await Promise.all([
-    paymentApi.getPendingWater(selectedMeter.value),
-    paymentApi.getWaterPrepaymentBalance(selectedMeter.value)
-  ])
-  pendingBills.value = bills || []
-  prepaymentBalance.value = Number(balance || 0)
-  selectedBills.value = []
-  payAmount.value = 0
-  billTable.value?.clearSelection()
-  if (preselectBillId) {
-    await nextTick()
-    const target = pendingBills.value.find(b => b.id === preselectBillId)
-    if (target) {
-      billTable.value?.toggleRowSelection(target, true)
-      selectedBills.value = [target]
-      payAmount.value = Number(target.waterCharge || 0) - Number(target.actualWaterPaid || 0)
+  try {
+    const [bills, balance] = await Promise.all([
+      paymentApi.getPendingWater(selectedMeter.value),
+      paymentApi.getWaterPrepaymentBalance(selectedMeter.value)
+    ])
+    pendingBills.value = bills || []
+    prepaymentBalance.value = Number(balance || 0)
+    selectedBills.value = []
+    payAmount.value = 0
+    billTable.value?.clearSelection()
+    if (preselectBillId) {
+      await nextTick()
+      const target = pendingBills.value.find(b => b.id === preselectBillId)
+      if (target) {
+        billTable.value?.toggleRowSelection(target, true)
+        selectedBills.value = [target]
+        payAmount.value = Number(target.waterCharge || 0) - Number(target.actualWaterPaid || 0)
+      }
     }
+  } catch (error) {
+    pendingBills.value = []
+    selectedBills.value = []
+    prepaymentBalance.value = 0
+    ElMessage.error('加载待缴账单失败')
+    console.warn('加载待缴账单失败', error)
   }
+}
+
+function refreshBillingPage() {
+  loadPendingBillRows()
+  if (selectedMeter.value) loadPendingBills()
+}
+
+function printPage() {
+  window.print()
 }
 
 function onSelectBills(rows) {
@@ -349,6 +380,9 @@ async function doPay() {
     payAmount.value = 0
     billTable.value?.clearSelection()
     await Promise.all([loadPendingBills(), loadPendingBillRows()])
+  } catch (error) {
+    ElMessage.error('缴费失败')
+    console.warn('水费缴费失败', error)
   } finally {
     paying.value = false
   }
@@ -372,6 +406,9 @@ async function openHistory() {
     billYearMonthMap.value = map
     historyList.value = payments || []
     prepaymentLogs.value = logs || []
+  } catch (error) {
+    ElMessage.error('加载缴费历史失败')
+    console.warn('加载缴费历史失败', error)
   } finally {
     historyLoading.value = false
   }
