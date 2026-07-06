@@ -15,7 +15,10 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+
+import java.time.format.DateTimeParseException;
 
 /**
  * 全局异常处理器
@@ -58,10 +61,24 @@ public class GlobalExceptionHandler {
         return ApiResponse.fail("缺少必填参数：" + e.getParameterName());
     }
 
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiResponse<Void> handleMissingServletRequestPart(MissingServletRequestPartException e) {
+        log.warn("缺少请求部分: {}", e.getMessage());
+        return ApiResponse.fail(400, "缺少必填的上传文件或参数");
+    }
+
     @ExceptionHandler(TypeMismatchException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiResponse<Void> handleTypeMismatch(TypeMismatchException e) {
         return ApiResponse.fail("参数类型错误");
+    }
+
+    @ExceptionHandler(DateTimeParseException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiResponse<Void> handleDateTimeParseException(DateTimeParseException e) {
+        log.warn("日期格式错误: {}", e.getMessage());
+        return ApiResponse.fail(400, "日期格式错误，请使用 yyyy-MM-dd 格式");
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)

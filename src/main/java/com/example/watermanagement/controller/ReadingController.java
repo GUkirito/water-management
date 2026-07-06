@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -52,20 +53,20 @@ public class ReadingController {
     @Operation(summary = "预览抄表导入", description = "只解析和校验 Excel，不写入数据库")
     @PostMapping("/import/preview")
     public ApiResponse<Map<String, Object>> previewImportReadings(
-            @Parameter(description = "抄表日期（yyyy-MM-dd）") @RequestParam String readingDate,
+            @Parameter(description = "抄表日期（yyyy-MM-dd）")
+            @RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate readingDate,
             @Parameter(description = "Excel 文件") @RequestParam("file") MultipartFile file) throws IOException {
-        LocalDate date = LocalDate.parse(readingDate);
-        return ApiResponse.ok("预览完成", readingService.previewImportReadings(file.getInputStream(), date));
+        return ApiResponse.ok("预览完成", readingService.previewImportReadings(file.getInputStream(), readingDate));
     }
 
     @Operation(summary = "导入已填写的抄表模板",
             description = "上传已填写的 Excel，自动计算用量、检测异常、生成水费账单")
     @PostMapping("/import")
     public ApiResponse<Map<String, Object>> importReadings(
-            @Parameter(description = "抄表日期（yyyy-MM-dd）") @RequestParam String readingDate,
+            @Parameter(description = "抄表日期（yyyy-MM-dd）")
+            @RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate readingDate,
             @Parameter(description = "Excel 文件") @RequestParam("file") MultipartFile file) throws IOException {
-        LocalDate date = LocalDate.parse(readingDate);
-        Map<String, Object> result = readingService.importReadings(file.getInputStream(), date);
+        Map<String, Object> result = readingService.importReadings(file.getInputStream(), readingDate);
         return ApiResponse.ok("导入完成", result);
     }
 
@@ -87,10 +88,10 @@ public class ReadingController {
             description = "返回指定日期下某村所有户的抄表行数据，用于前端表格展示")
     @GetMapping("/by-date")
     public ApiResponse<List<ReadingRowDTO>> getByDate(
-            @Parameter(description = "抄表日期（yyyy-MM-dd）") @RequestParam String readingDate,
+            @Parameter(description = "抄表日期（yyyy-MM-dd）")
+            @RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate readingDate,
             @Parameter(description = "村名") @RequestParam(required = false) String villageName) {
-        LocalDate date = LocalDate.parse(readingDate);
-        return ApiResponse.ok(readingService.getByDate(date, villageName));
+        return ApiResponse.ok(readingService.getByDate(readingDate, villageName));
     }
 
     @Operation(summary = "获取系统配置", description = "返回水价、异常阈值等前端所需配置")
@@ -110,10 +111,10 @@ public class ReadingController {
             description = "接收 JSON 数组 [{waterMeterId, currentReading, chargeableUsage, note}]，批量计算用量并生成水费账单")
     @PostMapping("/batch")
     public ApiResponse<Map<String, Object>> batchSave(
-            @Parameter(description = "抄表日期（yyyy-MM-dd）") @RequestParam String readingDate,
+            @Parameter(description = "抄表日期（yyyy-MM-dd）")
+            @RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate readingDate,
             @Valid @RequestBody List<ReadingBatchItem> items) {
-        LocalDate date = LocalDate.parse(readingDate);
-        Map<String, Object> result = readingService.batchSave(items, date);
+        Map<String, Object> result = readingService.batchSave(items, readingDate);
         return ApiResponse.ok("批量保存完成", result);
     }
 
@@ -122,9 +123,9 @@ public class ReadingController {
     public ApiResponse<Reading> singleSave(
             @Parameter(description = "水表编号") @RequestParam String waterMeterId,
             @Parameter(description = "本次表底数") @RequestParam BigDecimal currentReading,
-            @Parameter(description = "抄表日期（yyyy-MM-dd）") @RequestParam String readingDate) {
-        LocalDate date = LocalDate.parse(readingDate);
-        return ApiResponse.ok("录入成功", readingService.singleSave(waterMeterId, currentReading, date));
+            @Parameter(description = "抄表日期（yyyy-MM-dd）")
+            @RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate readingDate) {
+        return ApiResponse.ok("录入成功", readingService.singleSave(waterMeterId, currentReading, readingDate));
     }
 
     @Operation(summary = "按年月查询抄表记录", description = "查询指定村在指定月份的抄表记录")

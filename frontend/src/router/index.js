@@ -53,4 +53,8 @@ const router = createRouter({
   routes
 })
 
+router.afterEach((to) => {
+  document.title = to.meta?.title ? `${to.meta.title} - 村级自来水管理系统` : '村级自来水管理系统'
+})
+
 export default router

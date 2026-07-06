@@ -20,6 +20,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -103,7 +104,8 @@ public class MaterialRecordController {
         if (body.get("amount") == null || body.get("paidDate") == null) {
             return ApiResponse.fail("参数 amount 和 paidDate 不能为空");
         }
-        BigDecimal amount = new BigDecimal(body.get("amount").toString());
+        BigDecimal amount = new BigDecimal(body.get("amount").toString())
+                .setScale(2, RoundingMode.HALF_UP);
         LocalDate paidDate = LocalDate.parse(body.get("paidDate").toString());
         String collector = body.get("collector") != null ? body.get("collector").toString() : "管理员";
         String note = body.get("note") != null ? body.get("note").toString() : null;

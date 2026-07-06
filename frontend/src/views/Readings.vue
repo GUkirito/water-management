@@ -311,6 +311,7 @@ async function loadAllVillages() {
     allVillages.value = [...new Set((r?.content || []).map(h => h.villageName).filter(Boolean))].sort()
   } catch (error) {
     console.warn('加载村组失败', error)
+    ElMessage.warning('加载村组列表失败，请检查网络连接')
   }
 }
 
@@ -322,6 +323,7 @@ async function loadHouseholdList() {
     householdList.value = r?.content || []
   } catch (error) {
     console.warn('加载住户列表失败', error)
+    ElMessage.warning('加载住户列表失败，请检查网络连接')
     householdList.value = []
   }
 }
@@ -368,7 +370,6 @@ async function saveHousehold() {
     loadTable()
     loadAllVillages()
   } catch (error) {
-    ElMessage.error('保存住户失败')
     console.warn('保存住户失败', error)
   } finally {
     savingHousehold.value = false
@@ -379,7 +380,8 @@ async function deleteHousehold() {
   if (!householdForm.id) return
   try {
     await ElMessageBox.confirm('确认永久删除该住户及其关联数据吗？此操作不可恢复。', '确认永久删除', { type: 'warning' })
-  } catch {
+  } catch (error) {
+    console.warn('取消删除住户:', error)
     return
   }
   try {
@@ -390,7 +392,6 @@ async function deleteHousehold() {
     loadTable()
     loadAllVillages()
   } catch (error) {
-    ElMessage.error('删除住户失败')
     console.warn('删除住户失败', error)
   }
 }
@@ -404,6 +405,7 @@ async function loadTable() {
     households = r?.content || []
   } catch (error) {
     console.warn('加载抄表住户失败', error)
+    ElMessage.warning('加载抄表住户失败，请检查网络连接')
     households = []
   }
 
@@ -413,6 +415,7 @@ async function loadTable() {
     if (readings?.length) readings.forEach(r => { readingsMap[r.waterMeterId] = r })
   } catch (error) {
     console.warn('加载当天抄表记录失败', error)
+    ElMessage.warning('加载当天抄表记录失败，请检查网络连接')
   }
 
   tableData.value = households.map(h => {
@@ -473,7 +476,7 @@ async function applyBatchVillage() {
     batchVillage.value = ''
     await Promise.all([loadTable(), loadHouseholdList(), loadAllVillages()])
   } catch (error) {
-    if (error !== 'cancel') ElMessage.error('批量改村失败')
+    if (error !== 'cancel') console.warn('批量改村失败', error)
   }
 }
 
@@ -487,7 +490,8 @@ async function batchDeleteHouseholds() {
   if (!selectedHouseholdIds.value.length) return
   try {
     await ElMessageBox.confirm(`确认永久删除选中的 ${selectedHouseholdIds.value.length} 户及其关联数据吗？`, '确认批量删除', { type: 'warning' })
-  } catch {
+  } catch (error) {
+    console.warn('取消批量删除住户:', error)
     return
   }
   try {
@@ -504,7 +508,6 @@ async function batchDeleteHouseholds() {
     loadHouseholdList()
     loadAllVillages()
   } catch (error) {
-    ElMessage.error('批量删除失败')
     console.warn('批量删除住户失败', error)
   }
 }
@@ -571,7 +574,7 @@ async function onReadingImportFileChange(event) {
     importResultVisible.value = true
     ElMessage.success('预览完成，请确认后导入')
   } catch (error) {
-    ElMessage.error(error?.message || '抄表数据预览失败')
+    console.warn('抄表数据预览失败', error)
   }
 }
 
@@ -591,7 +594,7 @@ async function onHistoryImportFileChange(event) {
     importResultVisible.value = true
     ElMessage.success('预览完成，请确认后导入')
   } catch (error) {
-    ElMessage.error(error?.message || '历史表底预览失败')
+    console.warn('历史表底预览失败', error)
   }
 }
 
@@ -622,7 +625,7 @@ async function confirmPreviewImport() {
     })
     await loadTable()
   } catch (error) {
-    ElMessage.error(error?.message || '导入失败')
+    console.warn('导入失败', error)
   } finally {
     confirmingImport.value = false
   }
@@ -654,7 +657,7 @@ async function onRegisterImportFileChange(event) {
     await loadHouseholdList()
     await loadAllVillages()
   } catch (error) {
-    ElMessage.error(error?.message || '住户信息导入失败')
+    console.warn('住户信息导入失败', error)
   }
 }
 
@@ -749,7 +752,6 @@ async function exportTemplate() {
     URL.revokeObjectURL(a.href)
     ElMessage.success('模板已下载')
   } catch (error) {
-    ElMessage.error('模板下载失败')
     console.warn('下载抄表模板失败', error)
   }
 }
@@ -781,7 +783,6 @@ async function batchSave() {
     })
     loadTable()
   } catch (error) {
-    ElMessage.error('批量保存失败')
     console.warn('批量保存抄表失败', error)
   } finally {
     saving.value = false
@@ -800,7 +801,6 @@ async function exportHistoryTemplate() {
     URL.revokeObjectURL(a.href)
     ElMessage.success('历史表底模板已下载')
   } catch (error) {
-    ElMessage.error('历史表底模板下载失败')
     console.warn('下载历史表底模板失败', error)
   }
 }

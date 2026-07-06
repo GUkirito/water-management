@@ -259,7 +259,6 @@ async function loadWaterReport() {
     waterData.value = await reportApi.getWaterBillReport(params) || []
     computeWaterStats()
   } catch (error) {
-    ElMessage.error('加载水费报表失败')
     console.warn('加载水费报表失败', error)
   } finally { waterLoading.value = false }
 }
@@ -287,7 +286,6 @@ async function exportWaterReport() {
     downloadBlob(blob, `${y}年${m}月水费报表.xlsx`)
     ElMessage.success('导出成功')
   } catch (error) {
-    ElMessage.error('导出水费报表失败')
     console.warn('导出水费报表失败', error)
   }
 }
@@ -319,7 +317,6 @@ async function loadMaterialReport() {
     }))
     computeMatStats()
   } catch (error) {
-    ElMessage.error('加载材料费统计失败')
     console.warn('加载材料费统计失败', error)
   } finally { matLoading.value = false }
 }
@@ -360,7 +357,6 @@ async function exportMaterialReport() {
     downloadBlob(blob, '材料费统计表.xlsx')
     ElMessage.success('导出成功')
   } catch (error) {
-    ElMessage.error('导出材料费统计失败')
     console.warn('导出材料费统计失败', error)
   }
 }

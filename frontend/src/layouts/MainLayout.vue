@@ -46,7 +46,7 @@
       </el-menu>
 
       <div class="wm-sidebar-version">
-        <span>v1.7.0</span>
+        <span>v1.7.2</span>
       </div>
     </el-aside>
 

@@ -261,7 +261,6 @@ onMounted(async () => {
     households.value = result?.content || []
     allVillages.value = [...new Set(households.value.map(h => h.villageName).filter(Boolean))].sort()
   } catch (error) {
-    ElMessage.error('加载住户失败')
     console.warn('加载缴费住户失败', error)
   }
   loadPendingBillRows()
@@ -282,7 +281,6 @@ async function loadPendingBillRows() {
     if (pendingFilters.billMonth) params.billMonth = pendingFilters.billMonth
     pendingBillRows.value = await paymentApi.listPendingWater(params) || []
   } catch (error) {
-    ElMessage.error('加载未缴账单失败')
     console.warn('加载未缴账单列表失败', error)
   } finally {
     pendingListLoading.value = false
@@ -327,7 +325,6 @@ async function loadPendingBills(preselectBillId = null) {
     pendingBills.value = []
     selectedBills.value = []
     prepaymentBalance.value = 0
-    ElMessage.error('加载待缴账单失败')
     console.warn('加载待缴账单失败', error)
   }
 }
@@ -381,7 +378,6 @@ async function doPay() {
     billTable.value?.clearSelection()
     await Promise.all([loadPendingBills(), loadPendingBillRows()])
   } catch (error) {
-    ElMessage.error('缴费失败')
     console.warn('水费缴费失败', error)
   } finally {
     paying.value = false
@@ -407,7 +403,6 @@ async function openHistory() {
     historyList.value = payments || []
     prepaymentLogs.value = logs || []
   } catch (error) {
-    ElMessage.error('加载缴费历史失败')
     console.warn('加载缴费历史失败', error)
   } finally {
     historyLoading.value = false

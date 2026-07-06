@@ -5,6 +5,7 @@ import com.example.watermanagement.dto.HouseholdRequest;
 import com.example.watermanagement.entity.Household;
 import com.example.watermanagement.exception.BusinessException;
 import com.example.watermanagement.repository.HouseholdRepository;
+import com.example.watermanagement.repository.MaterialPaymentRepository;
 import com.example.watermanagement.repository.MaterialRecordRepository;
 import com.example.watermanagement.repository.PaymentRepository;
 import com.example.watermanagement.repository.PrepaymentLogRepository;
@@ -39,6 +40,7 @@ public class HouseholdServiceImpl implements HouseholdService {
     private final PaymentRepository paymentRepository;
     private final PrepaymentLogRepository prepaymentLogRepository;
     private final MaterialRecordRepository materialRecordRepository;
+    private final MaterialPaymentRepository materialPaymentRepository;
 
     @Override
     public Page<Household> list(List<String> villageNames, String waterMeterId, Pageable pageable) {
@@ -127,6 +129,11 @@ public class HouseholdServiceImpl implements HouseholdService {
                 });
         prepaymentLogRepository.findByWaterMeterIdOrderByCreatedAtDesc(meterId)
                 .forEach(prepaymentLogRepository::delete);
+        materialRecordRepository.findByWaterMeterId(meterId)
+                .ifPresent(record -> {
+                    materialPaymentRepository.deleteByRecordId(record.getId());
+                    materialRecordRepository.delete(record);
+                });
         householdRepository.delete(household);
         log.info("物理删除村民: {} [水表: {}]", household.getHouseholdName(), meterId);
     }

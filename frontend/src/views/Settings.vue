@@ -201,8 +201,8 @@ async function saveConfig() {
       abnormalThreshold: threshold.value
     })
     ElMessage.success('配置已保存')
-  } catch {
-    ElMessage.error('保存失败')
+  } catch (error) {
+    console.warn('保存配置失败', error)
   } finally {
     savingConfig.value = false
   }
@@ -219,8 +219,8 @@ async function downloadBackup() {
     a.click()
     URL.revokeObjectURL(url)
     ElMessage.success('备份下载成功')
-  } catch {
-    ElMessage.error('备份下载失败')
+  } catch (error) {
+    console.warn('备份下载失败', error)
   } finally {
     backingUp.value = false
   }
@@ -234,7 +234,8 @@ async function restoreBackup(uploadFile) {
       '确认恢复备份',
       { type: 'warning', confirmButtonText: '继续恢复', cancelButtonText: '取消' }
     )
-  } catch {
+  } catch (error) {
+    console.warn('取消恢复备份:', error)
     return
   }
 
@@ -245,8 +246,8 @@ async function restoreBackup(uploadFile) {
     const result = await settingsApi.restoreBackup(formData)
     ElMessage.success(`恢复成功，请重启应用。回滚备份：${result.rollbackFilePath || '-'}`)
     dbFilePath.value = result.dbFilePath || dbFilePath.value
-  } catch {
-    ElMessage.error('恢复失败')
+  } catch (error) {
+    console.warn('恢复备份失败', error)
   } finally {
     restoring.value = false
   }
@@ -258,8 +259,8 @@ async function runHealthCheck() {
     healthIssues.value = await accountingApi.healthCheck() || []
     healthChecked.value = true
     ElMessage.success(healthIssues.value.length ? `发现 ${healthIssues.value.length} 条账务问题` : '账务健康检查通过')
-  } catch {
-    ElMessage.error('账务健康检查失败')
+  } catch (error) {
+    console.warn('账务健康检查失败', error)
   } finally {
     checkingHealth.value = false
   }
@@ -297,8 +298,8 @@ async function lockSelectedMonth() {
     })
     ElMessage.success('月结锁定成功')
     await loadAccountingControls()
-  } catch {
-    ElMessage.error('月结锁定失败')
+  } catch (error) {
+    console.warn('月结锁定失败', error)
   } finally {
     lockingMonth.value = false
   }
@@ -311,7 +312,8 @@ async function unlockMonth(row) {
       '确认解锁',
       { type: 'warning', confirmButtonText: '解除锁定', cancelButtonText: '取消' }
     )
-  } catch {
+  } catch (error) {
+    console.warn('取消解除月结锁定:', error)
     return
   }
   try {
@@ -319,7 +321,6 @@ async function unlockMonth(row) {
     ElMessage.success('已解除月结锁定')
     await loadAccountingControls()
   } catch (error) {
-    ElMessage.error('解除月结锁定失败')
     console.warn('解除月结锁定失败', error)
   }
 }
@@ -344,8 +345,8 @@ async function submitAdjustment() {
     ElMessage.success('调账成功')
     adjustmentForm.value.reason = ''
     await loadAccountingControls()
-  } catch {
-    ElMessage.error('调账失败')
+  } catch (error) {
+    console.warn('调账失败', error)
   } finally {
     adjusting.value = false
   }

@@ -11,6 +11,16 @@
       </div>
     </section>
 
+    <el-alert
+      v-if="allLoadFailed"
+      title="数据加载失败"
+      type="error"
+      show-icon
+      description="无法获取仪表盘数据，请检查系统运行状态"
+      class="wm-dashboard-alert"
+      closable
+    />
+
     <template v-if="statsLoading">
       <div class="skeleton dashboard-skeleton-rate" />
       <section class="stats-grid">
@@ -160,6 +170,7 @@ const matStats = reactive({
 })
 const abnormalReadings = ref([])
 const villageSummary = ref([])
+const allLoadFailed = ref(false)
 
 const waterRate = computed(() => stats.collectionRate)
 const materialRate = computed(() => matStats.collectionRate)
@@ -179,11 +190,13 @@ const materialRateColor = computed(() => rateColor(Number(matStats.collectionRat
 
 async function loadDashboard() {
   statsLoading.value = true
+  let failedCount = 0
   try {
     try {
       const result = await householdApi.list({ page: 0, size: 1 })
       stats.totalHouseholds = result?.totalElements || 0
     } catch (error) {
+      failedCount++
       console.warn('加载户数统计失败', error)
     }
 
@@ -205,6 +218,7 @@ async function loadDashboard() {
         stats.collectionRate = charge > 0 ? ((paid / charge) * 100).toFixed(1) : '0.0'
       }
     } catch (error) {
+      failedCount++
       console.warn('加载水费统计失败', error)
     }
 
@@ -221,6 +235,7 @@ async function loadDashboard() {
       matStats.totalPaid = totalPaid.toFixed(2)
       matStats.collectionRate = totalFee > 0 ? ((totalPaid / totalFee) * 100).toFixed(1) : '100.0'
     } catch (error) {
+      failedCount++
       console.warn('加载材料费统计失败', error)
     }
 
@@ -228,6 +243,7 @@ async function loadDashboard() {
       const abnormal = await readingApi.getAbnormal({ limit: 20 })
       abnormalReadings.value = abnormal || []
     } catch (error) {
+      failedCount++
       console.warn('加载异常抄表失败', error)
     }
 
@@ -238,9 +254,11 @@ async function loadDashboard() {
       })
       villageSummary.value = summary || []
     } catch (error) {
+      failedCount++
       console.warn('加载村组收缴进度失败', error)
     }
   } finally {
+    allLoadFailed.value = failedCount === 5
     statsLoading.value = false
   }
 }
@@ -260,6 +278,10 @@ onBeforeUnmount(() => {
   width: 100%;
   min-height: 112px;
   background: linear-gradient(135deg, #f8fafc 0%, #fff 100%);
+}
+
+.wm-dashboard-alert {
+  margin-bottom: 12px;
 }
 
 .wm-rate-overview-content {

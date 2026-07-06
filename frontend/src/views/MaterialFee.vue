@@ -252,7 +252,6 @@ async function loadData() {
     tableData.value = r?.content || []
     total.value = r?.totalElements || 0
   } catch (error) {
-    ElMessage.error('加载材料费列表失败')
     console.warn('加载材料费列表失败', error)
   } finally {
     loading.value = false
@@ -319,7 +318,6 @@ async function saveForm() {
     await loadData()
     await loadVillages()
   } catch (error) {
-    ElMessage.error('保存材料费失败')
     console.warn('保存材料费失败', error)
   } finally {
     savingForm.value = false
@@ -327,21 +325,20 @@ async function saveForm() {
 }
 
 async function handleDelete(row) {
-  try { await ElMessageBox.confirm(`确认删除 ${row.householdName} 的记录吗？`, '确认删除', { type: 'warning' }) } catch { return }
+  try { await ElMessageBox.confirm(`确认删除 ${row.householdName} 的记录吗？`, '确认删除', { type: 'warning' }) } catch (error) { console.warn('取消删除材料费:', error); return }
   try {
     await materialRecordApi.delete(row.id)
     ElMessage.success('已删除')
     await loadData()
     await loadVillages()
   } catch (error) {
-    ElMessage.error('删除材料费失败')
     console.warn('删除材料费失败', error)
   }
 }
 
 async function handleBatchDelete() {
   if (!selectedRows.value.length) { ElMessage.warning('请先选择记录'); return }
-  try { await ElMessageBox.confirm(`确认删除 ${selectedRows.value.length} 条记录吗？`, '确认批量删除', { type: 'warning' }) } catch { return }
+  try { await ElMessageBox.confirm(`确认删除 ${selectedRows.value.length} 条记录吗？`, '确认批量删除', { type: 'warning' }) } catch (error) { console.warn('取消批量删除材料费:', error); return }
   try {
     await materialRecordApi.batchDelete(selectedRows.value.map(r => r.id))
     ElMessage.success(`已删除 ${selectedRows.value.length} 条`)
@@ -349,7 +346,6 @@ async function handleBatchDelete() {
     await loadData()
     await loadVillages()
   } catch (error) {
-    ElMessage.error('批量删除失败')
     console.warn('批量删除材料费失败', error)
   }
 }
@@ -382,7 +378,7 @@ async function importExcelFile(file) {
     await loadData()
     await loadVillages()
   } catch (error) {
-    ElMessage.error(error?.message || '材料费导入失败')
+    console.warn('材料费导入失败', error)
   }
   return false
 }
@@ -434,7 +430,6 @@ async function exportExcel() {
     URL.revokeObjectURL(a.href)
     ElMessage.success('导出成功')
   } catch (error) {
-    ElMessage.error('导出失败')
     console.warn('导出材料费失败', error)
   }
 }
@@ -475,7 +470,6 @@ async function doCollect() {
     collectVisible.value = false
     await loadData()
   } catch (error) {
-    ElMessage.error('收费失败')
     console.warn('材料费收费失败', error)
   } finally {
     collecting.value = false
@@ -502,7 +496,8 @@ async function handleBatchCollect() {
         cancelButtonText: '取消'
       }
     )
-  } catch {
+  } catch (error) {
+    console.warn('取消批量收费:', error)
     return
   }
 
