@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -78,7 +79,9 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         // 按缴费日期降序排列
-        allPayments.sort((a, b) -> b.getPaidDate().compareTo(a.getPaidDate()));
+        allPayments.sort(Comparator.comparing(
+                Payment::getPaidDate,
+                Comparator.nullsLast(Comparator.reverseOrder())));
         return allPayments;
     }
 
@@ -103,7 +106,8 @@ public class PaymentServiceImpl implements PaymentService {
     /**
      * 水费合并缴费：按欠费比例分配实收金额到多个月份账单
      */
-    private List<Payment> payWaterBills(PaymentRequest request) {
+    private synchronized List<Payment> payWaterBills(PaymentRequest request) {
+        // ponytail: single-JVM lock is enough for the desktop app; use DB row locks if multi-instance writes matter.
         if (request.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessException("缴费金额必须大于 0");
         }
@@ -131,7 +135,7 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         BigDecimal totalDue = bills.stream()
-                .map(b -> b.getWaterCharge().subtract(b.getActualWaterPaid()))
+                .map(b -> b.getWaterCharge().subtract(nullToZero(b.getActualWaterPaid())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         if (totalDue.compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessException("所选账单均已缴清，无需重复缴费");
@@ -145,7 +149,7 @@ public class PaymentServiceImpl implements PaymentService {
 
         for (int i = 0; i < bills.size(); i++) {
             WaterBill bill = bills.get(i);
-            BigDecimal due = bill.getWaterCharge().subtract(bill.getActualWaterPaid());
+            BigDecimal due = bill.getWaterCharge().subtract(nullToZero(bill.getActualWaterPaid()));
 
             // 按比例分配：本次缴费金额 = 实收总额 × (该账单欠费 / 总欠费)
             BigDecimal thisPayment;
@@ -174,7 +178,7 @@ public class PaymentServiceImpl implements PaymentService {
             payments.add(paymentRepository.save(payment));
 
             // 更新水费账单
-            BigDecimal newPaid = bill.getActualWaterPaid().add(thisPayment);
+            BigDecimal newPaid = nullToZero(bill.getActualWaterPaid()).add(thisPayment);
             bill.setActualWaterPaid(newPaid);
             bill.setWaterStatus(calcStatus(newPaid, bill.getWaterCharge()));
             waterBillRepository.save(bill);
@@ -201,6 +205,7 @@ public class PaymentServiceImpl implements PaymentService {
      * 根据已缴金额和应收金额计算状态
      */
     private String calcStatus(BigDecimal paid, BigDecimal total) {
+        paid = nullToZero(paid);
         if (paid.compareTo(BigDecimal.ZERO) == 0) {
             return "未收";
         } else if (paid.compareTo(total) >= 0) {
@@ -212,5 +217,9 @@ public class PaymentServiceImpl implements PaymentService {
 
     private String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private BigDecimal nullToZero(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 }

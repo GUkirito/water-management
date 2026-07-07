@@ -1,6 +1,7 @@
 package com.example.watermanagement.service.impl;
 
 import com.example.watermanagement.dto.ReadingBatchItem;
+import com.example.watermanagement.dto.ConfigUpdateDTO;
 import com.example.watermanagement.dto.ReadingExportRow;
 import com.example.watermanagement.dto.HistoricalReadingImportRow;
 import com.example.watermanagement.dto.ReadingImportDetail;
@@ -379,13 +380,13 @@ public class ReadingServiceImpl implements ReadingService {
     }
 
     @Override
-    public void updateConfig(Map<String, Object> config) {
-        if (config.containsKey("waterPrice")) {
-            waterPrice = new BigDecimal(config.get("waterPrice").toString());
+    public void updateConfig(ConfigUpdateDTO config) {
+        if (config.getWaterPrice() != null) {
+            waterPrice = config.getWaterPrice();
             configProps.setProperty("water.price", waterPrice.toString());
         }
-        if (config.containsKey("abnormalThreshold")) {
-            abnormalThreshold = new BigDecimal(config.get("abnormalThreshold").toString());
+        if (config.getAbnormalThreshold() != null) {
+            abnormalThreshold = BigDecimal.valueOf(config.getAbnormalThreshold());
             configProps.setProperty("water.abnormal.threshold", abnormalThreshold.toString());
         }
         CONFIG_FILE.getParentFile().mkdirs();
@@ -529,7 +530,7 @@ public class ReadingServiceImpl implements ReadingService {
         long fail = details.stream().filter(d -> "fail".equals(d.getStatus())).count();
         long skip = details.stream().filter(d -> "skip".equals(d.getStatus())).count();
         long abnormal = details.stream().filter(d -> "abnormal".equals(d.getStatus())).count();
-        long success = details.stream().filter(d -> "success".equals(d.getStatus()) || "abnormal".equals(d.getStatus())).count();
+        long success = details.stream().filter(d -> "success".equals(d.getStatus())).count();
         Map<String, Object> result = new HashMap<>();
         result.put("total", details.size());
         result.put("success", (int) success);
@@ -615,6 +616,9 @@ public class ReadingServiceImpl implements ReadingService {
                 .orElseThrow(() -> new BusinessException("水表不存在: " + waterMeterId));
 
         // 获取上次表底
+        if (currentReading == null) {
+            throw new BusinessException("current reading is required: " + waterMeterId);
+        }
         BigDecimal previousReading = getLastReadingBefore(waterMeterId, readingDate);
         BigDecimal usageAmount = currentReading.subtract(previousReading);
         if (usageAmount.compareTo(BigDecimal.ZERO) < 0) {
@@ -677,12 +681,19 @@ public class ReadingServiceImpl implements ReadingService {
                                     : existingBill.getActualWaterPaid();
                             if (paid.compareTo(waterCharge) > 0) {
                                 BigDecimal excess = paid.subtract(waterCharge).setScale(2, RoundingMode.HALF_UP);
-                                existingBill.setActualWaterPaid(waterCharge);
+                                paid = waterCharge;
                                 saveOverpaymentAdjustment(waterMeterId, existingBill, excess);
+                            } else if (paid.compareTo(waterCharge) < 0) {
+                                BigDecimal prepaidDeduction = getPrepaidDeduction(waterMeterId, waterCharge.subtract(paid));
+                                if (prepaidDeduction.compareTo(BigDecimal.ZERO) > 0) {
+                                    paid = paid.add(prepaidDeduction);
+                                    savePrepaymentDeduction(waterMeterId, existingBill, prepaidDeduction);
+                                }
                             }
                             existingBill.setWaterAmount(effectiveChargeable);
                             existingBill.setWaterCharge(waterCharge);
-                            existingBill.setWaterStatus(calcBillStatus(existingBill.getActualWaterPaid(), waterCharge));
+                            existingBill.setActualWaterPaid(paid);
+                            existingBill.setWaterStatus(calcBillStatus(paid, waterCharge));
                             waterBillRepository.save(existingBill);
                         },
                         () -> {
@@ -724,6 +735,8 @@ public class ReadingServiceImpl implements ReadingService {
      * 根据已缴金额和应收金额计算账单状态
      */
     private String calcBillStatus(BigDecimal paid, BigDecimal total) {
+        paid = paid == null ? BigDecimal.ZERO : paid;
+        total = total == null ? BigDecimal.ZERO : total;
         if (paid.compareTo(BigDecimal.ZERO) == 0) return "未收";
         if (paid.compareTo(total) >= 0) return "已收";
         return "部分收";
@@ -827,7 +840,7 @@ public class ReadingServiceImpl implements ReadingService {
             ORDER BY r.readingDate DESC
             """;
         return (List<Map<String, Object>>) entityManager.createQuery(jpql)
-                .setMaxResults(limit)
+                .setMaxResults(Math.min(Math.max(limit, 0), 500))
                 .getResultList();
     }
 }

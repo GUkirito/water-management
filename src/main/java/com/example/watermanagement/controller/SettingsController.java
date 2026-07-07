@@ -43,7 +43,9 @@ public class SettingsController {
     @GetMapping("/info")
     public ApiResponse<Map<String, String>> getInfo() {
         Map<String, String> info = new HashMap<>();
-        info.put("dbFilePath", getDbFile().getAbsolutePath());
+        String dbPath = getDbFile().getAbsolutePath();
+        String home = System.getProperty("user.home");
+        info.put("dbFilePath", dbPath.startsWith(home) ? "~" + dbPath.substring(home.length()) : dbPath);
         return ApiResponse.ok(info);
     }
 

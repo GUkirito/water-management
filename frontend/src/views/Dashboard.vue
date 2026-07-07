@@ -44,7 +44,7 @@
             <div class="wm-rate-divider">|</div>
             <div>
               <div class="wm-stat-label">材料费收缴率</div>
-              <div class="wm-stat-value wm-stat-value--compact" :class="materialRateColor">{{ materialRate }}%</div>
+              <div class="wm-stat-value wm-stat-value--compact" :class="materialRateColor">{{ materialRateText }}</div>
             </div>
           </div>
           <div class="wm-rate-total">
@@ -166,7 +166,7 @@ const stats = reactive({
 const matStats = reactive({
   totalFee: '0.00',
   totalPaid: '0.00',
-  collectionRate: '0.0'
+  collectionRate: null
 })
 const abnormalReadings = ref([])
 const villageSummary = ref([])
@@ -174,10 +174,11 @@ const allLoadFailed = ref(false)
 
 const waterRate = computed(() => stats.collectionRate)
 const materialRate = computed(() => matStats.collectionRate)
+const materialRateText = computed(() => materialRate.value == null ? '-' : `${materialRate.value}%`)
 const overallCollectionRate = computed(() => {
-  const water = Number(stats.collectionRate) || 0
-  const material = Number(matStats.collectionRate) || 0
-  return ((water + material) / 2).toFixed(1)
+  const totalCharge = Number(stats.monthlyCharge || 0) + Number(matStats.totalFee || 0)
+  const totalPaid = Number(stats.monthlyPaid || 0) + Number(matStats.totalPaid || 0)
+  return totalCharge > 0 ? ((totalPaid / totalCharge) * 100).toFixed(1) : '0.0'
 })
 const rateColor = (rate) => {
   if (rate >= 90) return 'text-emerald-600'
@@ -186,7 +187,7 @@ const rateColor = (rate) => {
 }
 const overallRateColor = computed(() => rateColor(Number(overallCollectionRate.value)))
 const waterRateColor = computed(() => rateColor(Number(stats.collectionRate)))
-const materialRateColor = computed(() => rateColor(Number(matStats.collectionRate)))
+const materialRateColor = computed(() => matStats.collectionRate == null ? '' : rateColor(Number(matStats.collectionRate)))
 
 async function loadDashboard() {
   statsLoading.value = true
@@ -233,7 +234,7 @@ async function loadDashboard() {
       })
       matStats.totalFee = totalFee.toFixed(2)
       matStats.totalPaid = totalPaid.toFixed(2)
-      matStats.collectionRate = totalFee > 0 ? ((totalPaid / totalFee) * 100).toFixed(1) : '100.0'
+      matStats.collectionRate = totalFee > 0 ? ((totalPaid / totalFee) * 100).toFixed(1) : null
     } catch (error) {
       failedCount++
       console.warn('加载材料费统计失败', error)
@@ -258,7 +259,7 @@ async function loadDashboard() {
       console.warn('加载村组收缴进度失败', error)
     }
   } finally {
-    allLoadFailed.value = failedCount === 5
+    allLoadFailed.value = failedCount >= 3
     statsLoading.value = false
   }
 }

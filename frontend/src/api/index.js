@@ -35,13 +35,13 @@ export const householdApi = {
   getById: (id) => api.get(`/households/${id}`),
   add: (data) => api.post('/households/add', data),
   update: (id, data) => api.put(`/households/update/${id}`, data),
-  delete: (id) => api.delete(`/households/delete/${id}`),
+  delete: (id) => api.delete(`/households/delete/${id}`, { params: { confirm: true } }),
   exportExcel: (params) => api.get('/households/export', { params, responseType: 'blob' }),
   importExcel: (formData) => api.post('/households/import', formData),
   importFromRegister: (formData) => api.post('/households/import-from-register', formData),
   batchUpdateVillage: (ids, villageName) => api.put('/households/batch-update-village', { ids, villageName }),
-  batchDelete: (ids) => api.post('/households/batch-delete', { ids }),
-  deleteByVillage: (villageName) => api.delete('/households/delete-by-village', { params: { villageName } })
+  batchDelete: (ids) => api.post('/households/batch-delete', { ids, confirm: true }),
+  deleteByVillage: (villageName) => api.delete('/households/delete-by-village', { params: { villageName, confirm: true } })
 }
 
 // ==================== 抄表管理 ====================

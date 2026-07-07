@@ -1,6 +1,7 @@
 package com.example.watermanagement.service;
 
 import com.example.watermanagement.dto.ReadingBatchItem;
+import com.example.watermanagement.dto.ConfigUpdateDTO;
 import com.example.watermanagement.dto.ReadingExportRow;
 import com.example.watermanagement.dto.ReadingRowDTO;
 import com.example.watermanagement.entity.Reading;
@@ -92,5 +93,5 @@ public interface ReadingService {
     /**
      * 更新系统配置（水价、异常阈值等），持久化到配置文件
      */
-    void updateConfig(Map<String, Object> config);
+    void updateConfig(ConfigUpdateDTO config);
 }

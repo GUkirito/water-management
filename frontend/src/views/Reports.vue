@@ -55,25 +55,28 @@
 
           <div v-if="waterLoading" class="skeleton wm-table-skeleton"></div>
           <el-table v-else :data="waterData" border stripe max-height="calc(100vh - 460px)">
-            <el-table-column prop="villageName" label="村名" width="120" />
-            <el-table-column prop="waterMeterId" label="水表编号" width="140" />
-            <el-table-column prop="householdName" label="户名" width="120" />
-            <el-table-column prop="waterAmount" label="用水量(吨)" width="120" />
-            <el-table-column prop="waterCharge" label="应收水费" width="120" />
-            <el-table-column prop="actualWaterPaid" label="实收水费" width="120" />
-            <el-table-column label="欠费" width="120">
+            <el-table-column prop="villageName" label="村名" width="120" resizable />
+            <el-table-column prop="waterMeterId" label="水表编号" width="140" resizable />
+            <el-table-column prop="householdName" label="户名" width="120" resizable />
+            <el-table-column prop="waterAmount" label="用水量(吨)" width="120" resizable />
+            <el-table-column prop="waterCharge" label="应收水费" width="120" resizable />
+            <el-table-column prop="actualWaterPaid" label="实收水费" width="120" resizable />
+            <el-table-column label="欠费" width="120" resizable>
               <template #default="{ row }">
                 <span :style="{ color: unpaidWater(row) > 0 ? 'var(--wm-danger)' : 'var(--wm-success)', fontWeight: 600 }">
                   ¥{{ unpaidWater(row).toFixed(2) }}
                 </span>
               </template>
             </el-table-column>
-            <el-table-column prop="waterStatus" label="状态" width="100">
+            <el-table-column prop="waterStatus" label="状态" width="100" resizable>
               <template #default="{ row }">
                 <el-tag :type="tagType(row.waterStatus)" size="small">{{ row.waterStatus }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="note" label="备注" min-width="180" show-overflow-tooltip />
+            <el-table-column label="缴费方式" width="120" resizable>
+              <template #default="{ row }">{{ row.paymentMethod || '-' }}</template>
+            </el-table-column>
+            <el-table-column prop="note" label="备注" width="200" resizable show-overflow-tooltip />
           </el-table>
           <el-empty v-if="!waterData.length && !waterLoading" :image-size="72" class="wm-empty">
             <template #description>
@@ -129,20 +132,20 @@
 
           <div v-if="matLoading" class="skeleton wm-table-skeleton"></div>
           <el-table v-else :data="materialData" border stripe max-height="calc(100vh - 460px)">
-            <el-table-column prop="waterMeterId" label="水表编号" width="140" />
-            <el-table-column prop="householdName" label="户名" width="120" />
-            <el-table-column prop="villageName" label="村名" width="120" />
-            <el-table-column prop="totalFee" label="应收材料费" width="130" />
-            <el-table-column prop="actualPaid" label="实收材料费" width="130" />
-            <el-table-column label="欠费" width="120">
+            <el-table-column prop="waterMeterId" label="水表编号" width="140" resizable />
+            <el-table-column prop="householdName" label="户名" width="120" resizable />
+            <el-table-column prop="villageName" label="村名" width="120" resizable />
+            <el-table-column prop="totalFee" label="应收材料费" width="130" resizable />
+            <el-table-column prop="actualPaid" label="实收材料费" width="130" resizable />
+            <el-table-column label="欠费" width="120" resizable>
               <template #default="{ row }">
                 <span :style="{ color: Number(row.unpaid) > 0 ? 'var(--wm-danger)' : 'var(--wm-success)', fontWeight: 600 }">
                   ¥{{ row.unpaid }}
                 </span>
               </template>
             </el-table-column>
-            <el-table-column prop="paidAt" label="最近缴费" width="120" />
-            <el-table-column prop="status" label="状态" width="100">
+            <el-table-column prop="paidAt" label="最近缴费" width="120" resizable />
+            <el-table-column prop="status" label="状态" width="100" resizable>
               <template #default="{ row }">
                 <el-tag :type="tagType(row.status)" size="small">{{ row.status }}</el-tag>
               </template>

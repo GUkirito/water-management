@@ -63,32 +63,32 @@
           class="wm-billing-list-table"
           @row-dblclick="startPayFromBill"
         >
-          <el-table-column prop="villageName" label="村组" width="110" show-overflow-tooltip />
-          <el-table-column prop="householdName" label="户主" width="100" />
-          <el-table-column prop="waterMeterId" label="表号" width="130" show-overflow-tooltip />
-          <el-table-column label="账单月份" width="110">
+          <el-table-column prop="villageName" label="村组" width="110" resizable show-overflow-tooltip />
+          <el-table-column prop="householdName" label="户主" width="100" resizable />
+          <el-table-column prop="waterMeterId" label="表号" width="130" resizable show-overflow-tooltip />
+          <el-table-column label="账单月份" width="110" resizable>
             <template #default="{ row }">{{ row.billYear }}年{{ row.billMonth }}月</template>
           </el-table-column>
-          <el-table-column label="用水量" width="100">
+          <el-table-column label="用水量" width="100" resizable>
             <template #default="{ row }">{{ Number(row.waterAmount || 0).toFixed(2) }}</template>
           </el-table-column>
-          <el-table-column label="应收" align="right" width="120">
+          <el-table-column label="应收" align="right" width="120" resizable>
             <template #default="{ row }"><span class="font-mono">¥{{ Number(row.waterCharge || 0).toFixed(2) }}</span></template>
           </el-table-column>
-          <el-table-column label="已收" align="right" width="120">
+          <el-table-column label="已收" align="right" width="120" resizable>
             <template #default="{ row }"><span class="font-mono">¥{{ Number(row.actualWaterPaid || 0).toFixed(2) }}</span></template>
           </el-table-column>
-          <el-table-column label="欠费" align="right" width="120">
+          <el-table-column label="欠费" align="right" width="120" resizable>
             <template #default="{ row }">
               <span class="font-mono" style="color:var(--wm-danger);font-weight:600">¥{{ Number(row.dueAmount || 0).toFixed(2) }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="waterStatus" label="状态" width="100">
+          <el-table-column prop="waterStatus" label="状态" width="100" resizable>
             <template #default="{ row }">
               <el-tag :type="row.waterStatus === '部分收' ? 'warning' : 'danger'" size="small">{{ row.waterStatus }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="note" label="备注" min-width="140" show-overflow-tooltip />
+          <el-table-column prop="note" label="备注" width="160" resizable show-overflow-tooltip />
           <el-table-column label="操作" width="100" fixed="right">
             <template #default="{ row }">
               <el-button type="primary" link @click="startPayFromBill(row)">收款</el-button>
@@ -119,36 +119,39 @@
 
         <el-table :data="pendingBills" border stripe @selection-change="onSelectBills" ref="billTable">
           <el-table-column type="selection" width="50" />
-          <el-table-column prop="billYear" label="年份" width="90" />
-          <el-table-column prop="billMonth" label="月份" width="90">
+          <el-table-column prop="billYear" label="年份" width="90" resizable />
+          <el-table-column prop="billMonth" label="月份" width="90" resizable>
             <template #default="{ row }">{{ row.billMonth }}月</template>
           </el-table-column>
-          <el-table-column label="应收水费" align="right" width="140">
+          <el-table-column label="应收水费" align="right" width="140" resizable>
             <template #default="{ row }"><span class="font-mono">¥{{ Number(row.waterCharge || 0).toFixed(2) }}</span></template>
           </el-table-column>
-          <el-table-column label="已缴金额" align="right" width="140">
+          <el-table-column label="已缴金额" align="right" width="140" resizable>
             <template #default="{ row }"><span class="font-mono">¥{{ Number(row.actualWaterPaid || 0).toFixed(2) }}</span></template>
           </el-table-column>
-          <el-table-column label="欠费金额" align="right" width="140">
+          <el-table-column label="欠费金额" align="right" width="140" resizable>
             <template #default="{ row }">
               <span class="font-mono" style="color:var(--wm-danger);font-weight:600">¥{{ (Number(row.waterCharge || 0) - Number(row.actualWaterPaid || 0)).toFixed(2) }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="waterStatus" label="状态" width="100">
+          <el-table-column prop="waterStatus" label="状态" width="100" resizable>
             <template #default="{ row }">
               <el-tag :type="row.waterStatus === '已收' ? 'success' : row.waterStatus === '部分收' ? 'warning' : 'danger'" size="small">
                 {{ row.waterStatus }}
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="note" label="备注" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="note" label="备注" width="200" resizable show-overflow-tooltip />
         </el-table>
         <el-empty v-if="!pendingBills.length" description="该住户暂无未缴水费" :image-size="72" class="wm-empty" />
 
         <div v-if="pendingBills.length > 0" class="wm-toolbar" style="margin-top:16px">
           <div>
-            <div class="wm-muted" style="font-size:12px">已选账单应收合计</div>
+            <div class="wm-muted" style="font-size:12px">已选 {{ selectedBills.length }} 笔账单，应收合计</div>
             <div style="font-size:22px;font-weight:700;color:var(--wm-warning)">¥{{ totalDue.toFixed(2) }}</div>
+            <div v-if="selectedPartialCount > 0" class="wm-muted" style="font-size:12px;margin-top:2px">
+              其中 {{ selectedPartialCount }} 笔已缴 ¥{{ selectedPaidTotal.toFixed(2) }}
+            </div>
           </div>
           <el-input-number v-model="payAmount" :precision="2" :min="0" style="width:170px" />
           <div v-if="payAmount > 0 && payAmount === totalDue" style="color:var(--wm-success)">
@@ -159,6 +162,9 @@
           </div>
           <div v-if="payAmount > 0 && payAmount < totalDue" style="color:var(--wm-warning)">
             支持部分缴费
+          </div>
+          <div v-if="selectedBills.length && Math.abs(paymentGap) > 0.01" style="color:var(--wm-warning)">
+            差额 ¥{{ Math.abs(paymentGap).toFixed(2) }}
           </div>
           <el-select v-model="payMethod" style="width:120px">
             <el-option label="现金" value="现金" />
@@ -251,6 +257,13 @@ const totalDue = computed(() =>
   selectedBills.value.reduce((sum, b) => sum + Number(b.waterCharge || 0) - Number(b.actualWaterPaid || 0), 0)
 )
 const prepayAmount = computed(() => Math.max(0, Number(payAmount.value || 0) - totalDue.value))
+const selectedPaidTotal = computed(() =>
+  selectedBills.value.reduce((sum, b) => sum + Number(b.actualWaterPaid || 0), 0)
+)
+const selectedPartialCount = computed(() =>
+  selectedBills.value.filter(b => Number(b.actualWaterPaid || 0) > 0).length
+)
+const paymentGap = computed(() => Number(payAmount.value || 0) - totalDue.value)
 const listTotalDue = computed(() =>
   pendingBillRows.value.reduce((sum, b) => sum + Number(b.dueAmount || 0), 0)
 )

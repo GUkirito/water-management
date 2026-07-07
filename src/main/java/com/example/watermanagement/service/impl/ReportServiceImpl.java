@@ -3,10 +3,12 @@ package com.example.watermanagement.service.impl;
 import com.example.watermanagement.dto.VillageCollectionSummaryRow;
 import com.example.watermanagement.dto.WaterBillReportRow;
 import com.example.watermanagement.entity.Household;
+import com.example.watermanagement.entity.Payment;
 import com.example.watermanagement.entity.Reading;
 import com.example.watermanagement.entity.WaterBill;
 import com.example.watermanagement.exception.BusinessException;
 import com.example.watermanagement.repository.HouseholdRepository;
+import com.example.watermanagement.repository.PaymentRepository;
 import com.example.watermanagement.repository.ReadingRepository;
 import com.example.watermanagement.repository.WaterBillRepository;
 import com.example.watermanagement.service.ReportService;
@@ -21,6 +23,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -34,6 +37,7 @@ public class ReportServiceImpl implements ReportService {
     private final WaterBillRepository waterBillRepository;
     private final HouseholdRepository householdRepository;
     private final ReadingRepository readingRepository;
+    private final PaymentRepository paymentRepository;
 
     @Override
     public List<WaterBillReportRow> getWaterBillReportData(int year, int month,
@@ -42,6 +46,7 @@ public class ReportServiceImpl implements ReportService {
         List<Household> households = getHouseholds(villageNames);
         Map<String, Household> meterMap = households.stream()
                 .collect(Collectors.toMap(Household::getWaterMeterId, h -> h, (a, b) -> a));
+        Map<Long, String> paymentMethodMap = buildPaymentMethodMap(bills);
 
         return bills.stream()
                 .filter(b -> meterMap.containsKey(b.getWaterMeterId()))
@@ -55,10 +60,36 @@ public class ReportServiceImpl implements ReportService {
                             .waterCharge(b.getWaterCharge())
                             .actualWaterPaid(b.getActualWaterPaid())
                             .waterStatus(b.getWaterStatus())
+                            .paymentMethod(paymentMethodMap.getOrDefault(b.getId(), "-"))
                             .note(b.getNote())
                             .build();
                 })
                 .collect(Collectors.toList());
+    }
+
+    private Map<Long, String> buildPaymentMethodMap(List<WaterBill> bills) {
+        List<Long> billIds = bills.stream()
+                .map(WaterBill::getId)
+                .filter(id -> id != null)
+                .toList();
+        if (billIds.isEmpty()) {
+            return Map.of();
+        }
+
+        return paymentRepository.findByBillTypeAndBillIdInOrderByPaidDateDesc("water", billIds).stream()
+                .filter(payment -> payment.getPaymentMethod() != null && !payment.getPaymentMethod().isBlank())
+                .collect(Collectors.groupingBy(
+                        Payment::getBillId,
+                        Collectors.collectingAndThen(
+                                Collectors.toMap(
+                                        Payment::getPaymentMethod,
+                                        Payment::getPaymentMethod,
+                                        (first, ignored) -> first,
+                                        LinkedHashMap::new
+                                ),
+                                methods -> String.join(", ", methods.keySet())
+                        )
+                ));
     }
 
     @Override

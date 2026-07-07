@@ -1,6 +1,7 @@
 package com.example.watermanagement.controller;
 
 import com.example.watermanagement.dto.ApiResponse;
+import com.example.watermanagement.dto.ConfigUpdateDTO;
 import com.example.watermanagement.dto.ReadingBatchItem;
 import com.example.watermanagement.dto.ReadingRowDTO;
 import com.example.watermanagement.entity.Reading;
@@ -10,8 +11,10 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -30,6 +33,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/readings")
 @RequiredArgsConstructor
+@Validated
 public class ReadingController {
 
     private final ReadingService readingService;
@@ -102,7 +106,7 @@ public class ReadingController {
 
     @Operation(summary = "更新系统配置")
     @PostMapping("/config")
-    public ApiResponse<Void> updateConfig(@RequestBody Map<String, Object> body) {
+    public ApiResponse<Void> updateConfig(@Valid @RequestBody ConfigUpdateDTO body) {
         readingService.updateConfig(body);
         return ApiResponse.ok("配置已更新", null);
     }
@@ -140,7 +144,7 @@ public class ReadingController {
     @Operation(summary = "查询异常抄表记录", description = "返回最近N条异常抄表，含户名村名，用于仪表盘提醒")
     @GetMapping("/abnormal")
     public ApiResponse<List<Map<String, Object>>> getAbnormal(
-            @Parameter(description = "返回条数") @RequestParam(defaultValue = "20") int limit) {
+            @Parameter(description = "返回条数") @RequestParam(defaultValue = "20") @Max(500) int limit) {
         return ApiResponse.ok(readingService.getAbnormalReadings(limit));
     }
 }

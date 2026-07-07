@@ -67,7 +67,12 @@ public class HouseholdController {
 
     @Operation(summary = "删除村民（物理删除）", description = "永久物理删除村民及关联的抄表记录、水费账单和缴费记录")
     @DeleteMapping("/delete/{id}")
-    public ApiResponse<Void> delete(@Parameter(description = "村民ID") @PathVariable Long id) {
+    public ApiResponse<Void> delete(
+            @Parameter(description = "村民ID") @PathVariable Long id,
+            @RequestParam(defaultValue = "false") boolean confirm) {
+        if (!confirm) {
+            throw new BusinessException("危险操作：永久删除住户需添加参数 ?confirm=true");
+        }
         householdService.delete(id);
         return ApiResponse.ok("删除成功", null);
     }
@@ -77,6 +82,9 @@ public class HouseholdController {
     public ApiResponse<Void> batchDelete(@RequestBody Map<String, List<Long>> body) {
         if (body.get("ids") == null || body.get("ids").isEmpty()) {
             return ApiResponse.fail("参数 ids 不能为空");
+        }
+        if (!Boolean.TRUE.equals(body.get("confirm"))) {
+            throw new BusinessException("危险操作：批量永久删除住户需传 confirm=true");
         }
         householdService.batchDelete(body.get("ids"));
         return ApiResponse.ok("批量删除成功", null);

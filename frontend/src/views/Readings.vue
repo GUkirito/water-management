@@ -1,7 +1,11 @@
 <template>
   <div class="wm-page wm-readings-page">
+    <el-button class="wm-reading-sidebar-toggle" type="primary" circle @click="sidebarOpen = true">
+      <el-icon><Menu /></el-icon>
+    </el-button>
+    <div v-if="sidebarOpen" class="wm-reading-sidebar-mask" @click="sidebarOpen = false"></div>
     <div class="wm-reading-workspace">
-      <aside class="wm-panel wm-reading-sidebar">
+      <aside class="wm-panel wm-reading-sidebar" :class="{ 'is-open': sidebarOpen }">
         <div class="wm-panel-body wm-page-shell">
           <div>
             <div style="font-size:15px;font-weight:600;margin-bottom:10px">村组</div>
@@ -97,42 +101,42 @@
             >
               <el-table-column type="selection" width="42" />
               <el-table-column type="index" label="序号" fixed="left" width="60" />
-              <el-table-column prop="householdName" label="户主" width="120" />
-              <el-table-column prop="waterMeterId" label="表号" width="120" />
-              <el-table-column prop="previousReading" label="上次表底" width="90" />
-              <el-table-column label="本次表底" align="right" width="140">
+              <el-table-column prop="householdName" label="户主" width="120" resizable />
+              <el-table-column prop="waterMeterId" label="表号" width="120" resizable />
+              <el-table-column prop="previousReading" label="上次表底" width="90" resizable />
+              <el-table-column label="本次表底" align="right" width="140" resizable>
                 <template #default="{ row }">
                   <el-input v-model="row.currentReading" placeholder="输入" size="small" @change="calcRow(row)" :class="{ 'is-error': row.isAbnormal }" />
                 </template>
               </el-table-column>
-              <el-table-column label="用水量" align="right" width="100">
+              <el-table-column label="用水量" align="right" width="100" resizable>
                 <template #default="{ row }"><span class="font-mono">{{ row.usageAmount != null ? row.usageAmount : '-' }}</span></template>
               </el-table-column>
-              <el-table-column label="水费" align="right" width="100">
+              <el-table-column label="水费" align="right" width="100" resizable>
                 <template #default="{ row }"><span class="font-mono">{{ row.waterCharge != null ? row.waterCharge : '-' }}</span></template>
               </el-table-column>
-              <el-table-column label="状态" width="78">
+              <el-table-column label="状态" width="78" resizable>
                 <template #default="{ row }">
                   <el-tag v-if="row.isAbnormal" type="danger" size="small">异常</el-tag>
                   <el-tag v-else-if="row.currentReading" type="success" size="small">正常</el-tag>
                   <el-tag v-else type="info" size="small">-</el-tag>
                 </template>
               </el-table-column>
-              <el-table-column prop="phone" label="电话" width="120" />
-              <el-table-column label="计费用水量" width="120">
+              <el-table-column prop="phone" label="电话" width="120" resizable />
+              <el-table-column label="计费用水量" width="120" resizable>
                 <template #default="{ row }">
                   <el-input-number v-model="row.chargeableUsage" :precision="2" :min="0" size="small" controls-position="right" style="width:100px" @change="calcCharge(row)" />
                 </template>
               </el-table-column>
-              <el-table-column label="水价" width="80">
+              <el-table-column label="水价" width="80" resizable>
                 <template #default>{{ waterPrice }}</template>
               </el-table-column>
-              <el-table-column label="备注" min-width="120">
+              <el-table-column label="备注" width="140" resizable>
                 <template #default="{ row }">
                   <el-input v-model="row.note" placeholder="备注" size="small" />
                 </template>
               </el-table-column>
-              <el-table-column prop="abnormalReason" label="异常原因" min-width="140" show-overflow-tooltip />
+              <el-table-column prop="abnormalReason" label="异常原因" width="160" resizable show-overflow-tooltip />
             </el-table>
 
             <el-empty v-else :image-size="84" class="wm-empty">
@@ -210,10 +214,14 @@
 <script setup>
 import { ref, reactive, onMounted, computed, nextTick, onBeforeUnmount, watch } from 'vue'
 import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
+import { Menu } from '@element-plus/icons-vue'
+import { useRoute } from 'vue-router'
 import { householdApi, readingApi } from '@/api'
 
+const route = useRoute()
 const readingDate = ref(new Date().toISOString().slice(0, 10))
 const selectedVillage = ref('')
+const sidebarOpen = ref(false)
 const allVillages = ref([])
 const filterKeyword = ref('')
 const waterPrice = ref(1.8)
@@ -301,6 +309,7 @@ function selectVillage(v) {
   tableKeyword.value = ''
   tablePage.value = 1
   selectedHousehold.value = null
+  sidebarOpen.value = false
   loadHouseholdList()
   loadTable()
 }
@@ -335,6 +344,7 @@ function onSelectHousehold(h) {
   householdForm.waterMeterId = h.waterMeterId
   householdForm.phone = h.phone || ''
   householdForm.villageName = h.villageName || selectedVillage.value || ''
+  sidebarOpen.value = false
 }
 
 function addNewHousehold() {
@@ -454,7 +464,18 @@ async function loadTable() {
       abnormalReason: ''
     }
   })
+  applyRouteTarget()
   nextTick(updateTableHeight)
+}
+
+function applyRouteTarget() {
+  const waterMeterId = route.query.waterMeterId
+  if (!waterMeterId) return
+  const target = tableData.value.find(row => row.waterMeterId === waterMeterId)
+  if (!target) return
+  tableKeyword.value = waterMeterId
+  tablePage.value = 1
+  onSelectHousehold(target)
 }
 
 function onRowClick(row) { onSelectHousehold(row) }
@@ -814,6 +835,7 @@ onMounted(async () => {
     console.warn('加载抄表配置失败', error)
   }
   await loadAllVillages()
+  await loadTable()
   nextTick(updateTableHeight)
   window.addEventListener('resize', updateTableHeight, { passive: true })
   window.addEventListener('wm-refresh', refreshReadingsPage)
@@ -822,6 +844,10 @@ onMounted(async () => {
 
 watch([selectedVillage, tablePage, tablePageSize], () => {
   nextTick(updateTableHeight)
+})
+
+watch(() => route.query.waterMeterId, async () => {
+  if (route.path === '/readings') await loadTable()
 })
 
 onBeforeUnmount(() => {
@@ -864,6 +890,11 @@ onBeforeUnmount(() => {
   max-height: calc(100dvh - 72px);
   overflow: auto;
   min-height: 0;
+}
+
+.wm-reading-sidebar-toggle,
+.wm-reading-sidebar-mask {
+  display: none;
 }
 
 .wm-reading-sidebar :deep(.wm-panel-body),
@@ -1027,8 +1058,36 @@ onBeforeUnmount(() => {
   }
 
   .wm-reading-sidebar {
-    position: static;
+    position: fixed;
+    top: 84px;
+    bottom: 12px;
+    left: 12px;
+    z-index: 40;
+    width: min(320px, calc(100vw - 24px));
     max-height: none;
+    transform: translateX(calc(-100% - 24px));
+    transition: transform 0.2s ease;
+  }
+
+  .wm-reading-sidebar.is-open {
+    transform: translateX(0);
+  }
+
+  .wm-reading-sidebar-toggle {
+    position: fixed;
+    right: 16px;
+    bottom: 72px;
+    z-index: 42;
+    display: inline-flex;
+    box-shadow: var(--wm-shadow);
+  }
+
+  .wm-reading-sidebar-mask {
+    position: fixed;
+    inset: 0;
+    z-index: 39;
+    display: block;
+    background: rgba(15, 23, 42, 0.32);
   }
 
   .wm-reading-toolbar,

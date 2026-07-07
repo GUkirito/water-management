@@ -46,7 +46,7 @@
       </el-menu>
 
       <div class="wm-sidebar-version">
-        <span>v1.7.2</span>
+        <button type="button" @click="copyVersion">v1.7.3</button>
       </div>
     </el-aside>
 
@@ -65,7 +65,27 @@
           </div>
         </div>
         <div class="wm-topbar-right">
-          <span class="wm-chip">稳定运行</span>
+          <el-autocomplete
+            ref="globalSearchRef"
+            v-model="globalSearch"
+            class="wm-global-search"
+            placeholder="搜索户名/表号/村组"
+            :fetch-suggestions="fetchSearchSuggestions"
+            clearable
+            value-key="label"
+            @select="selectSearchResult"
+            @focus="ensureHouseholdsLoaded"
+          >
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+            <template #default="{ item }">
+              <div class="wm-global-search-item">
+                <span>{{ item.householdName }} [{{ item.waterMeterId }}]</span>
+                <small>{{ item.villageName || '-' }}</small>
+              </div>
+            </template>
+          </el-autocomplete>
         </div>
       </el-header>
 
@@ -89,11 +109,18 @@
 
 <script setup>
 import { ref, computed, onBeforeUnmount, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
-import { DataAnalysis, EditPen, Money, Coin, Document, Setting, Fold, Expand } from '@element-plus/icons-vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { householdApi } from '@/api'
+import { DataAnalysis, EditPen, Money, Coin, Document, Setting, Fold, Expand, Search } from '@element-plus/icons-vue'
 
 const route = useRoute()
+const router = useRouter()
 const isCollapsed = ref(false)
+const globalSearch = ref('')
+const globalSearchRef = ref(null)
+const globalHouseholds = ref([])
+const householdsLoaded = ref(false)
 const activeMenu = computed(() => route.path)
 const currentTitle = computed(() => route.meta?.title || '')
 const contentClass = computed(() => ['wm-content', route.path === '/readings' ? 'wm-content--readings' : ''])
@@ -101,6 +128,48 @@ const topbarClass = computed(() => ['wm-topbar', route.path === '/readings' ? 'w
 
 function dispatchShortcut(name) {
   window.dispatchEvent(new CustomEvent(`wm-${name}`))
+}
+
+async function ensureHouseholdsLoaded() {
+  if (householdsLoaded.value) return
+  const result = await householdApi.list({ page: 0, size: 10000 })
+  globalHouseholds.value = result?.content || []
+  householdsLoaded.value = true
+}
+
+async function fetchSearchSuggestions(query, callback) {
+  try {
+    await ensureHouseholdsLoaded()
+    const keyword = query.trim().toLowerCase()
+    const rows = keyword
+      ? globalHouseholds.value.filter(item =>
+          [item.householdName, item.waterMeterId, item.villageName]
+            .some(value => String(value || '').toLowerCase().includes(keyword))
+        )
+      : globalHouseholds.value
+    callback(rows.slice(0, 8).map(item => ({
+      ...item,
+      label: `${item.householdName} [${item.waterMeterId}] - ${item.villageName || '-'}`
+    })))
+  } catch (error) {
+    console.warn('加载全局搜索住户失败', error)
+    callback([])
+  }
+}
+
+function selectSearchResult(item) {
+  globalSearch.value = ''
+  router.push({ path: '/readings', query: { waterMeterId: item.waterMeterId } })
+}
+
+async function copyVersion() {
+  try {
+    await navigator.clipboard.writeText('v1.7.2')
+    ElMessage.success('版本号已复制')
+  } catch (error) {
+    console.warn('复制版本号失败', error)
+    ElMessage.warning('版本号复制失败')
+  }
 }
 
 function focusFirstInput() {
@@ -127,6 +196,12 @@ function handleKeydown(event) {
     event.preventDefault()
     dispatchShortcut('focus-search')
     requestAnimationFrame(focusFirstInput)
+    return
+  }
+
+  if (event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 'k') {
+    event.preventDefault()
+    globalSearchRef.value?.focus?.()
   }
 }
 
@@ -208,9 +283,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
   border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.wm-sidebar-version span {
+.wm-sidebar-version button {
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: #94a3b8;
   font-size: 12px;
+  cursor: pointer;
+}
+
+.wm-sidebar-version button:hover {
+  color: #e0f2fe;
 }
 
 .wm-menu :deep(.el-menu-item) {
@@ -282,6 +365,21 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.wm-global-search {
+  width: min(320px, 36vw);
+}
+
+.wm-global-search-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.35;
+}
+
+.wm-global-search-item small {
+  color: var(--wm-text-2);
 }
 
 .wm-content {
@@ -371,6 +469,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
     min-height: 72px;
     flex-wrap: wrap;
   }
+
+  .wm-global-search {
+    width: 240px;
+  }
 }
 
 @media (max-width: 768px) {
@@ -388,6 +490,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
 
   .wm-content--readings {
     padding: 8px;
+  }
+
+  .wm-topbar-right,
+  .wm-global-search {
+    width: 100%;
   }
 
   .wm-brand {

@@ -54,29 +54,29 @@
         <el-table v-else :data="tableData" border stripe max-height="calc(100vh - 360px)" style="width:100%" @selection-change="onSelectionChange">
           <el-table-column type="selection" width="50" :selectable="row => row.status === '未收'" />
           <el-table-column type="index" label="序号" width="60" />
-          <el-table-column prop="householdName" label="户主姓名" width="120" />
-          <el-table-column prop="waterMeterId" label="表号" width="130" />
-          <el-table-column prop="phone" label="电话" width="130" />
-          <el-table-column prop="villageName" label="村组" width="120" />
-          <el-table-column label="金额" align="right" width="140">
+          <el-table-column prop="householdName" label="户主姓名" width="120" resizable />
+          <el-table-column prop="waterMeterId" label="表号" width="130" resizable />
+          <el-table-column prop="phone" label="电话" width="130" resizable />
+          <el-table-column prop="villageName" label="村组" width="120" resizable />
+          <el-table-column label="金额" align="right" width="140" resizable>
             <template #default="{ row }">
               <span class="font-mono">¥{{ Number(row.totalFee || 0).toFixed(2) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="已缴" align="right" width="120">
+          <el-table-column label="已缴" align="right" width="120" resizable>
             <template #default="{ row }"><span class="font-mono">¥{{ Number(row.actualPaid || 0).toFixed(2) }}</span></template>
           </el-table-column>
-          <el-table-column label="欠费" align="right" width="120">
+          <el-table-column label="欠费" align="right" width="120" resizable>
             <template #default="{ row }">
               <span class="font-mono" :style="{color:unpaid(row)>0?'var(--wm-danger)':'var(--wm-success)',fontWeight:'600'}">¥{{ unpaid(row).toFixed(2) }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="status" label="状态" width="90">
+          <el-table-column prop="status" label="状态" width="90" resizable>
             <template #default="{ row }">
               <el-tag :type="statusType(row.status)" size="small">{{ row.status }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="paidAt" label="最近收款日期" width="130">
+          <el-table-column prop="paidAt" label="最近收款日期" width="130" resizable>
             <template #default="{ row }">{{ row.paidAt || '--' }}</template>
           </el-table-column>
           <el-table-column label="操作" width="220" fixed="right">

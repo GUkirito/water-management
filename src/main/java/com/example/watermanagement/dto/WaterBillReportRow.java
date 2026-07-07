@@ -38,6 +38,9 @@ public class WaterBillReportRow {
     @ExcelProperty("状态")
     private String waterStatus;
 
+    @ExcelProperty("缴费方式")
+    private String paymentMethod;
+
     @ExcelProperty("备注")
     private String note;
 }
