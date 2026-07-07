@@ -46,6 +46,9 @@
       </el-menu>
 
       <div class="wm-sidebar-version">
+        <button type="button" title="快捷键" aria-label="快捷键" @click="showShortcutPanel = true">
+          <el-icon><QuestionFilled /></el-icon>
+        </button>
         <button type="button" @click="copyVersion">v1.7.3</button>
       </div>
     </el-aside>
@@ -74,7 +77,6 @@
             clearable
             value-key="label"
             @select="selectSearchResult"
-            @focus="ensureHouseholdsLoaded"
           >
             <template #prefix>
               <el-icon><Search /></el-icon>
@@ -104,6 +106,17 @@
         </router-view>
       </el-main>
     </el-container>
+
+    <el-drawer v-model="showShortcutPanel" title="快捷键" size="360px">
+      <el-descriptions :column="1" border size="small">
+        <el-descriptions-item label="Ctrl + N">新增住户</el-descriptions-item>
+        <el-descriptions-item label="Ctrl + K">全局搜索</el-descriptions-item>
+        <el-descriptions-item label="Ctrl + Shift + F">切换主窗口</el-descriptions-item>
+        <el-descriptions-item label="F5">刷新当前页</el-descriptions-item>
+        <el-descriptions-item label="Ctrl + F">聚焦搜索框</el-descriptions-item>
+        <el-descriptions-item label="?">查看所有快捷键</el-descriptions-item>
+      </el-descriptions>
+    </el-drawer>
   </el-container>
 </template>
 
@@ -112,15 +125,14 @@ import { ref, computed, onBeforeUnmount, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { householdApi } from '@/api'
-import { DataAnalysis, EditPen, Money, Coin, Document, Setting, Fold, Expand, Search } from '@element-plus/icons-vue'
+import { DataAnalysis, EditPen, Money, Coin, Document, Setting, Fold, Expand, Search, QuestionFilled } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
 const isCollapsed = ref(false)
 const globalSearch = ref('')
 const globalSearchRef = ref(null)
-const globalHouseholds = ref([])
-const householdsLoaded = ref(false)
+const showShortcutPanel = ref(false)
 const activeMenu = computed(() => route.path)
 const currentTitle = computed(() => route.meta?.title || '')
 const contentClass = computed(() => ['wm-content', route.path === '/readings' ? 'wm-content--readings' : ''])
@@ -130,29 +142,21 @@ function dispatchShortcut(name) {
   window.dispatchEvent(new CustomEvent(`wm-${name}`))
 }
 
-async function ensureHouseholdsLoaded() {
-  if (householdsLoaded.value) return
-  const result = await householdApi.list({ page: 0, size: 10000 })
-  globalHouseholds.value = result?.content || []
-  householdsLoaded.value = true
-}
-
 async function fetchSearchSuggestions(query, callback) {
+  const keyword = query.trim()
+  if (!keyword) {
+    callback([])
+    return
+  }
   try {
-    await ensureHouseholdsLoaded()
-    const keyword = query.trim().toLowerCase()
-    const rows = keyword
-      ? globalHouseholds.value.filter(item =>
-          [item.householdName, item.waterMeterId, item.villageName]
-            .some(value => String(value || '').toLowerCase().includes(keyword))
-        )
-      : globalHouseholds.value
-    callback(rows.slice(0, 8).map(item => ({
+    const result = await householdApi.list({ page: 0, size: 8, keyword })
+    const rows = result?.content || []
+    callback(rows.map(item => ({
       ...item,
       label: `${item.householdName} [${item.waterMeterId}] - ${item.villageName || '-'}`
     })))
   } catch (error) {
-    console.warn('加载全局搜索住户失败', error)
+    console.warn('全局搜索失败', error)
     callback([])
   }
 }
@@ -162,9 +166,10 @@ function selectSearchResult(item) {
   router.push({ path: '/readings', query: { waterMeterId: item.waterMeterId } })
 }
 
-async function copyVersion() {
+async function copyVersion(event) {
+  const versionText = event?.currentTarget?.textContent?.trim() || 'unknown'
   try {
-    await navigator.clipboard.writeText('v1.7.2')
+    await navigator.clipboard.writeText(versionText)
     ElMessage.success('版本号已复制')
   } catch (error) {
     console.warn('复制版本号失败', error)
@@ -179,7 +184,18 @@ function focusFirstInput() {
   input?.select?.()
 }
 
+function isTypingTarget(event) {
+  const target = event.target
+  return ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName) || target?.isContentEditable
+}
+
 function handleKeydown(event) {
+  if (event.key === '?' && !event.ctrlKey && !event.altKey && !event.metaKey && !isTypingTarget(event)) {
+    event.preventDefault()
+    showShortcutPanel.value = true
+    return
+  }
+
   if (event.key === 'F5') {
     event.preventDefault()
     dispatchShortcut('refresh')
@@ -278,12 +294,19 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
   right: 0;
   bottom: 0;
   left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   padding: 12px;
   text-align: center;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .wm-sidebar-version button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 0;
   border: 0;
   background: transparent;

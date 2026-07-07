@@ -54,6 +54,9 @@
     <section class="wm-panel">
       <div class="wm-panel-body">
         <div class="wm-section-title">系统信息</div>
+        <div v-if="isTauriEnv" class="wm-table-actions" style="margin-bottom:12px">
+          <el-button type="primary" :loading="checkingUpdate" @click="checkAppUpdate">检查更新</el-button>
+        </div>
         <el-descriptions :column="3" border>
           <el-descriptions-item label="后端框架">Spring Boot 4.0.6</el-descriptions-item>
           <el-descriptions-item label="前端框架">Vue 3 + Vite + Element Plus</el-descriptions-item>
@@ -174,6 +177,8 @@ const threshold = ref(100)
 const savingConfig = ref(false)
 const backingUp = ref(false)
 const restoring = ref(false)
+const isTauriEnv = ref(!!window.__TAURI__)
+const checkingUpdate = ref(false)
 const checkingHealth = ref(false)
 const healthChecked = ref(false)
 const healthIssues = ref([])
@@ -250,6 +255,23 @@ async function restoreBackup(uploadFile) {
     console.warn('恢复备份失败', error)
   } finally {
     restoring.value = false
+  }
+}
+
+async function checkAppUpdate() {
+  checkingUpdate.value = true
+  try {
+    const invoke = window.__TAURI__?.core?.invoke || window.__TAURI__?.invoke
+    if (!invoke) {
+      ElMessage.warning('当前环境不支持检查更新')
+      return
+    }
+    const result = await invoke('check_app_update')
+    ElMessage.success(result || '当前已是最新版本')
+  } catch (error) {
+    ElMessage.warning('检查更新失败：' + (error?.message || error))
+  } finally {
+    checkingUpdate.value = false
   }
 }
 

@@ -21,6 +21,33 @@
 
           <div class="wm-divider"></div>
 
+          <div v-if="unpaidHouseholdShortcuts.length" class="wm-reading-shortcuts">
+            <div class="wm-reading-shortcuts-title">常用户</div>
+            <button
+              v-for="row in unpaidHouseholdShortcuts"
+              :key="row.waterMeterId"
+              type="button"
+              class="wm-reading-shortcut"
+              @click="jumpToReadingRow(row)"
+            >
+              <span>{{ row.householdName }} [{{ row.waterMeterId }}]</span>
+              <el-tag type="warning" size="small">欠费</el-tag>
+            </button>
+          </div>
+
+          <div v-if="recentReadingShortcuts.length" class="wm-reading-shortcuts">
+            <div class="wm-reading-shortcuts-title">最近录入</div>
+            <button
+              v-for="row in recentReadingShortcuts"
+              :key="row.waterMeterId"
+              type="button"
+              class="wm-reading-shortcut"
+              @click="jumpToReadingRow(row)"
+            >
+              <span>{{ row.householdName }} [{{ row.waterMeterId }}]</span>
+            </button>
+          </div>
+
           <div v-if="selectedHousehold" class="wm-panel" style="box-shadow:none">
             <div class="wm-panel-body">
               <div style="font-size:14px;font-weight:600;margin-bottom:10px">编辑住户</div>
@@ -86,7 +113,7 @@
         <section class="wm-panel wm-reading-table-panel">
           <div class="wm-table-shell wm-reading-table-shell">
             <el-table
-              v-if="tableData.length > 0 || selectedVillage !== ''"
+              v-if="tableData.length > 0"
               :data="pagedTableData"
               border
               stripe
@@ -106,7 +133,7 @@
               <el-table-column prop="previousReading" label="上次表底" width="90" resizable />
               <el-table-column label="本次表底" align="right" width="140" resizable>
                 <template #default="{ row }">
-                  <el-input v-model="row.currentReading" placeholder="输入" size="small" @change="calcRow(row)" :class="{ 'is-error': row.isAbnormal }" />
+                  <el-input v-model="row.currentReading" placeholder="输入" size="small" class="wm-current-reading-input" @change="calcRow(row)" :class="{ 'is-error': row.isAbnormal }" />
                 </template>
               </el-table-column>
               <el-table-column label="用水量" align="right" width="100" resizable>
@@ -141,13 +168,13 @@
 
             <el-empty v-else :image-size="84" class="wm-empty">
               <template #description>
-                <p class="text-gray-500 text-sm">请选择左侧村组开始录入抄表</p>
-                <p class="text-gray-400 text-xs mt-1">没有住户时可先新增第一个住户</p>
+                <p class="text-gray-500 text-sm">该村组暂无住户</p>
+                <p class="text-gray-400 text-xs mt-1">点击下方按钮新增第一个住户</p>
               </template>
               <el-button type="primary" @click="addNewHousehold">新增住户</el-button>
             </el-empty>
 
-            <div v-if="tableData.length > 0 || selectedVillage !== ''" class="wm-reading-pagination">
+            <div v-if="tableData.length > 0" class="wm-reading-pagination">
               <el-pagination v-model:current-page="tablePage" v-model:page-size="tablePageSize" :page-sizes="[10,20,50,100]" :total="filteredTableData.length" layout="total,sizes,prev,pager,next" size="small" />
             </div>
           </div>
@@ -216,7 +243,7 @@ import { ref, reactive, onMounted, computed, nextTick, onBeforeUnmount, watch } 
 import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
 import { Menu } from '@element-plus/icons-vue'
 import { useRoute } from 'vue-router'
-import { householdApi, readingApi } from '@/api'
+import { householdApi, paymentApi, readingApi } from '@/api'
 
 const route = useRoute()
 const readingDate = ref(new Date().toISOString().slice(0, 10))
@@ -247,6 +274,7 @@ const savingHousehold = ref(false)
 const tableData = ref([])
 const selectedHouseholdIds = ref([])
 const batchVillage = ref('')
+const recentReadingMeters = ref([])
 const readingImportInput = ref(null)
 const historyImportInput = ref(null)
 const registerImportInput = ref(null)
@@ -287,6 +315,13 @@ const pagedTableData = computed(() => {
   const start = (tablePage.value - 1) * tablePageSize.value
   return filteredTableData.value.slice(start, start + tablePageSize.value)
 })
+const unpaidHouseholdShortcuts = computed(() => tableData.value.filter(row => row.hasUnpaidBill).slice(0, 6))
+const recentReadingShortcuts = computed(() =>
+  recentReadingMeters.value
+    .map(meterId => tableData.value.find(row => row.waterMeterId === meterId))
+    .filter(Boolean)
+    .slice(0, 6)
+)
 
 function rowClassName({ row }) {
   const classes = []
@@ -428,6 +463,19 @@ async function loadTable() {
     ElMessage.warning('加载当天抄表记录失败，请检查网络连接')
   }
 
+  let unpaidMeters = new Set()
+  try {
+    const [billYear, billMonth] = readingDate.value.split('-').map(Number)
+    const pendingRows = await paymentApi.listPendingWater({
+      billYear,
+      billMonth,
+      villageName: selectedVillage.value || undefined
+    })
+    unpaidMeters = new Set((pendingRows || []).map(row => row.waterMeterId))
+  } catch (error) {
+    console.warn('加载欠费住户失败', error)
+  }
+
   tableData.value = households.map(h => {
     const r = readingsMap[h.waterMeterId]
     if (r) {
@@ -445,7 +493,8 @@ async function loadTable() {
         waterCharge: chargeable != null ? (Number(chargeable) * waterPrice.value).toFixed(2) : null,
         note: r.note || '',
         isAbnormal: r.isAbnormal || false,
-        abnormalReason: r.abnormalReason || ''
+        abnormalReason: r.abnormalReason || '',
+        hasUnpaidBill: unpaidMeters.has(h.waterMeterId)
       }
     }
     return {
@@ -461,11 +510,15 @@ async function loadTable() {
       waterCharge: null,
       note: '',
       isAbnormal: false,
-      abnormalReason: ''
+      abnormalReason: '',
+      hasUnpaidBill: unpaidMeters.has(h.waterMeterId)
     }
-  })
+  }).sort((a, b) => Number(b.hasUnpaidBill) - Number(a.hasUnpaidBill))
   applyRouteTarget()
-  nextTick(updateTableHeight)
+  nextTick(() => {
+    updateTableHeight()
+    focusFirstEmptyReading()
+  })
 }
 
 function applyRouteTarget() {
@@ -540,6 +593,7 @@ function calcRow(row) {
     row.waterCharge = null
     row.isAbnormal = false
     row.abnormalReason = ''
+    recentReadingMeters.value = recentReadingMeters.value.filter(meterId => meterId !== row.waterMeterId)
     return
   }
   const cur = parseFloat(row.currentReading)
@@ -552,6 +606,7 @@ function calcRow(row) {
   row.abnormalReason = reverseAbnormal ? '表底倒转' : spikeAbnormal ? `用量突增：${usage.toFixed(2)} 吨` : ''
   row.chargeableUsage = usage > 0 ? Number(usage.toFixed(2)) : 0
   calcCharge(row)
+  rememberRecentReading(row)
 }
 
 function calcCharge(row) {
@@ -561,6 +616,36 @@ function calcCharge(row) {
 
 function triggerReadingImport() {
   readingImportInput.value?.click()
+}
+
+function rememberRecentReading(row) {
+  recentReadingMeters.value = [
+    row.waterMeterId,
+    ...recentReadingMeters.value.filter(meterId => meterId !== row.waterMeterId)
+  ]
+}
+
+function jumpToReadingRow(row) {
+  tableKeyword.value = ''
+  const index = tableData.value.findIndex(item => item.waterMeterId === row.waterMeterId)
+  if (index >= 0) tablePage.value = Math.floor(index / tablePageSize.value) + 1
+  onSelectHousehold(row)
+  nextTick(() => focusReadingInput(row.waterMeterId))
+}
+
+function focusFirstEmptyReading() {
+  const index = filteredTableData.value.findIndex(row => !row.currentReading)
+  if (index < 0) return
+  tablePage.value = Math.floor(index / tablePageSize.value) + 1
+  nextTick(() => focusReadingInput(filteredTableData.value[index]?.waterMeterId))
+}
+
+function focusReadingInput(waterMeterId) {
+  const index = pagedTableData.value.findIndex(row => row.waterMeterId === waterMeterId)
+  if (index < 0) return
+  const input = document.querySelectorAll('.wm-reading-table-shell .wm-current-reading-input input')[index]
+  input?.focus()
+  input?.select?.()
 }
 
 function triggerHistoryImport() {
@@ -939,6 +1024,49 @@ onBeforeUnmount(() => {
 
 .wm-hidden-file-input {
   display: none;
+}
+
+.wm-reading-shortcuts {
+  display: grid;
+  gap: 6px;
+}
+
+.wm-reading-shortcuts + .wm-reading-shortcuts {
+  margin-top: 12px;
+}
+
+.wm-reading-shortcuts-title {
+  color: var(--wm-text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.wm-reading-shortcut {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--wm-border);
+  border-radius: 8px;
+  background: var(--wm-surface);
+  color: var(--wm-text);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+
+.wm-reading-shortcut:hover {
+  border-color: var(--wm-primary);
+  background: #f0f9ff;
+}
+
+.wm-reading-shortcut span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .wm-reading-table-panel {
