@@ -39,12 +39,10 @@ public class HouseholdController {
     public ApiResponse<Page<Household>> list(
             @Parameter(description = "村名列表（多选）") @RequestParam(required = false) List<String> villageNames,
             @Parameter(description = "水表编号（模糊搜索）") @RequestParam(required = false) String waterMeterId,
-            @Parameter(description = "户名/水表编号/村组关键字") @RequestParam(required = false) String keyword,
             @Parameter(description = "页码（从0开始）") @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "每页条数") @RequestParam(defaultValue = "20") int size) {
         Pageable pageable = PageRequest.of(page, size);
-        String searchText = keyword != null && !keyword.isBlank() ? keyword : waterMeterId;
-        return ApiResponse.ok(householdService.list(villageNames, searchText, pageable));
+        return ApiResponse.ok(householdService.list(villageNames, waterMeterId, pageable));
     }
 
     @Operation(summary = "根据ID查询村民")

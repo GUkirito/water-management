@@ -81,7 +81,7 @@
           <el-empty v-if="!waterData.length && !waterLoading" :image-size="72" class="wm-empty">
             <template #description>
               <p class="text-gray-500 text-sm">暂无符合条件的水费报表</p>
-              <p class="text-gray-400 text-xs mt-1">请先完成抄表录入，或调整筛选条件后重试</p>
+              <p class="text-gray-400 text-xs mt-1">请选择月份后查看报表数据</p>
             </template>
           </el-empty>
         </div>

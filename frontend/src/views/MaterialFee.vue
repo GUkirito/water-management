@@ -89,8 +89,8 @@
         </el-table>
         <el-empty v-if="!loading && !tableData.length" :image-size="72" class="wm-empty">
           <template #description>
-            <p class="text-gray-500 text-sm">暂无材料费记录</p>
-            <p class="text-gray-400 text-xs mt-1">点击「新增」按钮录入材料费档案</p>
+            <p class="text-gray-500 text-sm">暂无材料费数据</p>
+            <p class="text-gray-400 text-xs mt-1">点击右上角「新增」按钮添加第一条记录</p>
           </template>
         </el-empty>
       </div>

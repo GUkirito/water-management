@@ -110,7 +110,7 @@
           <el-empty v-if="!villageSummary.length" :image-size="72" class="wm-empty">
             <template #description>
               <p class="text-gray-500 text-sm">暂无村组收缴数据</p>
-              <p class="text-gray-400 text-xs mt-1">请先在「抄表录入」中添加抄表记录，系统会自动生成账单</p>
+              <p class="text-gray-400 text-xs mt-1">请先在「抄表录入」中添加抄表记录</p>
             </template>
           </el-empty>
         </div>
@@ -140,8 +140,8 @@
           </el-table>
           <el-empty v-if="!abnormalReadings.length" :image-size="72" class="wm-empty">
             <template #description>
-              <p style="color: var(--wm-success); font-size: 15px">所有抄表记录正常 ✅</p>
-              <p class="text-gray-400 text-xs mt-1">暂无异常数据</p>
+              <p class="text-gray-500 text-sm">暂无异常记录</p>
+              <p class="text-gray-400 text-xs mt-1">暂无统计数据</p>
             </template>
           </el-empty>
         </div>

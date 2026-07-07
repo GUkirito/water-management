@@ -30,10 +30,6 @@ public class WaterBill {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Version
-    @Column(name = "version")
-    private Long version;
-
     /** 水表编号（关联 households.water_meter_id） */
     @Column(name = "water_meter_id", nullable = false)
     private String waterMeterId;

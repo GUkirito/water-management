@@ -48,12 +48,15 @@ public class HouseholdServiceImpl implements HouseholdService {
         boolean hasKeyword = waterMeterId != null && !waterMeterId.isBlank();
 
         if (hasVillages && hasKeyword) {
-            return householdRepository.searchActiveInVillages(villageNames, waterMeterId, pageable);
+            return householdRepository
+                    .findByVillageNameInAndWaterMeterIdContainingAndIsActiveTrue(
+                            villageNames, waterMeterId, pageable);
         } else if (hasVillages) {
             return householdRepository
                     .findByVillageNameInAndIsActiveTrue(villageNames, pageable);
         } else if (hasKeyword) {
-            return householdRepository.searchActive(waterMeterId, pageable);
+            return householdRepository
+                    .findByWaterMeterIdContainingAndIsActiveTrue(waterMeterId, pageable);
         } else {
             return householdRepository.findByIsActiveTrue(pageable);
         }
