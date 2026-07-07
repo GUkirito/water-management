@@ -46,7 +46,7 @@
       </el-menu>
 
       <div class="wm-sidebar-version">
-        <button type="button" @click="copyVersion">v1.7.3</button>
+        <button type="button" @click="copyVersion">v1.7.4</button>
       </div>
     </el-aside>
 
