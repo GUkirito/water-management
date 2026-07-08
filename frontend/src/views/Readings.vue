@@ -21,6 +21,36 @@
 
           <div class="wm-divider"></div>
 
+          <div v-if="unpaidHouseholdShortcuts.length" class="wm-reading-quick-list">
+            <div class="wm-reading-quick-title">常用户</div>
+            <button
+              v-for="row in unpaidHouseholdShortcuts"
+              :key="row.waterMeterId"
+              type="button"
+              class="wm-reading-quick-item"
+              @click="jumpToReadingRow(row)"
+            >
+              <span>{{ row.householdName }}</span>
+              <el-tag type="warning" size="small">欠费</el-tag>
+            </button>
+          </div>
+
+          <div v-if="recentReadingShortcuts.length" class="wm-reading-quick-list">
+            <div class="wm-reading-quick-title">最近录入</div>
+            <button
+              v-for="row in recentReadingShortcuts"
+              :key="row.waterMeterId"
+              type="button"
+              class="wm-reading-quick-item"
+              @click="jumpToReadingRow(row)"
+            >
+              <span>{{ row.householdName }}</span>
+              <small>{{ row.waterMeterId }}</small>
+            </button>
+          </div>
+
+          <div v-if="unpaidHouseholdShortcuts.length || recentReadingShortcuts.length" class="wm-divider"></div>
+
           <div v-if="selectedHousehold" class="wm-panel" style="box-shadow:none">
             <div class="wm-panel-body">
               <div style="font-size:14px;font-weight:600;margin-bottom:10px">编辑住户</div>
@@ -86,7 +116,7 @@
         <section class="wm-panel wm-reading-table-panel">
           <div class="wm-table-shell wm-reading-table-shell">
             <el-table
-              v-if="tableData.length > 0 || selectedVillage !== ''"
+              v-if="tableData.length > 0"
               :data="pagedTableData"
               border
               stripe
@@ -106,7 +136,14 @@
               <el-table-column prop="previousReading" label="上次表底" width="90" resizable />
               <el-table-column label="本次表底" align="right" width="140" resizable>
                 <template #default="{ row }">
-                  <el-input v-model="row.currentReading" placeholder="输入" size="small" @change="calcRow(row)" :class="{ 'is-error': row.isAbnormal }" />
+                  <el-input
+                    v-model="row.currentReading"
+                    placeholder="输入"
+                    size="small"
+                    :data-water-meter-id="row.waterMeterId"
+                    :class="['wm-current-reading-input', { 'is-error': row.isAbnormal }]"
+                    @change="calcRow(row)"
+                  />
                 </template>
               </el-table-column>
               <el-table-column label="用水量" align="right" width="100" resizable>
@@ -141,13 +178,13 @@
 
             <el-empty v-else :image-size="84" class="wm-empty">
               <template #description>
-                <p class="text-gray-500 text-sm">请选择左侧村组开始录入抄表</p>
-                <p class="text-gray-400 text-xs mt-1">没有住户时可先新增第一个住户</p>
+                <p class="text-gray-500 text-sm">该村组暂无住户</p>
+                <p class="text-gray-400 text-xs mt-1">点击下方按钮新增第一个住户</p>
               </template>
               <el-button type="primary" @click="addNewHousehold">新增住户</el-button>
             </el-empty>
 
-            <div v-if="tableData.length > 0 || selectedVillage !== ''" class="wm-reading-pagination">
+            <div v-if="tableData.length > 0" class="wm-reading-pagination">
               <el-pagination v-model:current-page="tablePage" v-model:page-size="tablePageSize" :page-sizes="[10,20,50,100]" :total="filteredTableData.length" layout="total,sizes,prev,pager,next" size="small" />
             </div>
           </div>
@@ -216,7 +253,7 @@ import { ref, reactive, onMounted, computed, nextTick, onBeforeUnmount, watch } 
 import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
 import { Menu } from '@element-plus/icons-vue'
 import { useRoute } from 'vue-router'
-import { householdApi, readingApi } from '@/api'
+import { householdApi, readingApi, paymentApi } from '@/api'
 
 const route = useRoute()
 const readingDate = ref(new Date().toISOString().slice(0, 10))
@@ -245,6 +282,7 @@ const householdForm = reactive({ id: null, householdName: '', waterMeterId: '', 
 const savingHousehold = ref(false)
 
 const tableData = ref([])
+const recentReadingMeters = ref([])
 const selectedHouseholdIds = ref([])
 const batchVillage = ref('')
 const readingImportInput = ref(null)
@@ -287,6 +325,12 @@ const pagedTableData = computed(() => {
   const start = (tablePage.value - 1) * tablePageSize.value
   return filteredTableData.value.slice(start, start + tablePageSize.value)
 })
+
+const unpaidHouseholdShortcuts = computed(() => tableData.value.filter(row => row.hasUnpaidBill).slice(0, 6))
+const recentReadingShortcuts = computed(() => recentReadingMeters.value
+  .map(waterMeterId => tableData.value.find(row => row.waterMeterId === waterMeterId))
+  .filter(Boolean)
+  .slice(0, 6))
 
 function rowClassName({ row }) {
   const classes = []
@@ -428,6 +472,19 @@ async function loadTable() {
     ElMessage.warning('加载当天抄表记录失败，请检查网络连接')
   }
 
+  const unpaidMeterIds = new Set()
+  try {
+    const date = new Date(`${readingDate.value}T00:00:00`)
+    const params = { billYear: date.getFullYear(), billMonth: date.getMonth() + 1 }
+    if (selectedVillage.value) params.villageName = selectedVillage.value
+    const pendingBills = await paymentApi.listPendingWater(params)
+    ;(pendingBills || []).forEach(row => {
+      if (row.waterMeterId) unpaidMeterIds.add(row.waterMeterId)
+    })
+  } catch (error) {
+    console.warn('加载未缴水费列表失败', error)
+  }
+
   tableData.value = households.map(h => {
     const r = readingsMap[h.waterMeterId]
     if (r) {
@@ -444,6 +501,7 @@ async function loadTable() {
         chargeableUsage: chargeable != null ? Number(chargeable) : null,
         waterCharge: chargeable != null ? (Number(chargeable) * waterPrice.value).toFixed(2) : null,
         note: r.note || '',
+        hasUnpaidBill: unpaidMeterIds.has(h.waterMeterId),
         isAbnormal: r.isAbnormal || false,
         abnormalReason: r.abnormalReason || ''
       }
@@ -460,22 +518,67 @@ async function loadTable() {
       chargeableUsage: null,
       waterCharge: null,
       note: '',
+      hasUnpaidBill: unpaidMeterIds.has(h.waterMeterId),
       isAbnormal: false,
       abnormalReason: ''
     }
+  }).sort((a, b) => Number(b.hasUnpaidBill) - Number(a.hasUnpaidBill))
+  const hasRouteTarget = applyRouteTarget()
+  nextTick(() => {
+    updateTableHeight()
+    if (hasRouteTarget) {
+      focusReadingInput(route.query.waterMeterId)
+    } else {
+      focusFirstEmptyReading()
+    }
   })
-  applyRouteTarget()
-  nextTick(updateTableHeight)
 }
 
 function applyRouteTarget() {
   const waterMeterId = route.query.waterMeterId
-  if (!waterMeterId) return
+  if (!waterMeterId) return false
   const target = tableData.value.find(row => row.waterMeterId === waterMeterId)
-  if (!target) return
+  if (!target) return false
   tableKeyword.value = waterMeterId
   tablePage.value = 1
   onSelectHousehold(target)
+  return true
+}
+
+function rememberRecentReading(row) {
+  recentReadingMeters.value = [
+    row.waterMeterId,
+    ...recentReadingMeters.value.filter(waterMeterId => waterMeterId !== row.waterMeterId)
+  ].slice(0, 8)
+}
+
+function forgetRecentReading(row) {
+  recentReadingMeters.value = recentReadingMeters.value.filter(waterMeterId => waterMeterId !== row.waterMeterId)
+}
+
+function jumpToReadingRow(row) {
+  tableKeyword.value = row.waterMeterId
+  tablePage.value = 1
+  onSelectHousehold(row)
+  nextTick(() => focusReadingInput(row.waterMeterId))
+  sidebarOpen.value = false
+}
+
+function focusReadingInput(waterMeterId) {
+  const inputWrap = Array.from(document.querySelectorAll('.wm-current-reading-input'))
+    .find(element => element.dataset.waterMeterId === String(waterMeterId))
+  const input = inputWrap?.querySelector('input')
+  input?.focus()
+  input?.select?.()
+}
+
+function focusFirstEmptyReading() {
+  const index = filteredTableData.value.findIndex(item => !item.currentReading)
+  if (index < 0) return
+  const row = filteredTableData.value[index]
+  tablePage.value = Math.floor(index / tablePageSize.value) + 1
+  onSelectHousehold(row)
+  nextTick(() => focusReadingInput(row.waterMeterId))
 }
 
 function onRowClick(row) { onSelectHousehold(row) }
@@ -540,6 +643,7 @@ function calcRow(row) {
     row.waterCharge = null
     row.isAbnormal = false
     row.abnormalReason = ''
+    forgetRecentReading(row)
     return
   }
   const cur = parseFloat(row.currentReading)
@@ -552,6 +656,7 @@ function calcRow(row) {
   row.abnormalReason = reverseAbnormal ? '表底倒转' : spikeAbnormal ? `用量突增：${usage.toFixed(2)} 吨` : ''
   row.chargeableUsage = usage > 0 ? Number(usage.toFixed(2)) : 0
   calcCharge(row)
+  rememberRecentReading(row)
 }
 
 function calcCharge(row) {
@@ -904,6 +1009,52 @@ onBeforeUnmount(() => {
 
 .wm-reading-sidebar :deep(.el-form-item) {
   margin-bottom: 10px;
+}
+
+.wm-reading-quick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wm-reading-quick-title {
+  color: var(--wm-text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.wm-reading-quick-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 1px solid var(--wm-border);
+  border-radius: 8px;
+  background: var(--wm-surface);
+  color: var(--wm-text);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+
+.wm-reading-quick-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wm-reading-quick-item small {
+  color: var(--wm-text-2);
+  font-size: 11px;
+}
+
+.wm-reading-quick-item:hover {
+  border-color: rgba(2, 132, 199, 0.35);
+  background: #e0f2fe;
 }
 
 .wm-reading-main {

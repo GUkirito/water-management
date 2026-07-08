@@ -62,6 +62,9 @@
           <el-descriptions-item label="API 文档">/swagger-ui.html</el-descriptions-item>
           <el-descriptions-item label="开发端口">后端 8080 / 前端 3000</el-descriptions-item>
         </el-descriptions>
+        <div v-if="isTauriEnv" class="wm-table-actions" style="margin-top:16px">
+          <el-button type="primary" @click="checkAppUpdate" :loading="checkingUpdate">检查更新</el-button>
+        </div>
       </div>
     </section>
 
@@ -174,6 +177,7 @@ const threshold = ref(100)
 const savingConfig = ref(false)
 const backingUp = ref(false)
 const restoring = ref(false)
+const checkingUpdate = ref(false)
 const checkingHealth = ref(false)
 const healthChecked = ref(false)
 const healthIssues = ref([])
@@ -192,6 +196,7 @@ const adjustmentForm = ref({
   reason: '',
   operator: '管理员'
 })
+const isTauriEnv = typeof window !== 'undefined' && !!window.__TAURI__
 
 async function saveConfig() {
   savingConfig.value = true
@@ -250,6 +255,24 @@ async function restoreBackup(uploadFile) {
     console.warn('恢复备份失败', error)
   } finally {
     restoring.value = false
+  }
+}
+
+async function checkAppUpdate() {
+  const invoke = window.__TAURI__?.core?.invoke || window.__TAURI__?.invoke
+  if (!invoke) {
+    ElMessage.warning('当前环境不支持检查更新')
+    return
+  }
+  checkingUpdate.value = true
+  try {
+    const result = await invoke('check_app_update')
+    ElMessage.success(result || '当前已是最新版本')
+  } catch (error) {
+    console.warn('检查更新失败', error)
+    ElMessage.warning('检查更新失败：' + (error?.message || error))
+  } finally {
+    checkingUpdate.value = false
   }
 }
 

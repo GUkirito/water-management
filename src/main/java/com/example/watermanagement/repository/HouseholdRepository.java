@@ -5,6 +5,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -28,6 +30,19 @@ public interface HouseholdRepository extends JpaRepository<Household, Long>,
     Page<Household> findByVillageNameInAndWaterMeterIdContainingAndIsActiveTrue(
             List<String> villageNames, String waterMeterId, Pageable pageable);
 
+    @Query("""
+            SELECT h FROM Household h
+            WHERE h.isActive = true
+              AND h.villageName IN :villageNames
+              AND (h.householdName LIKE :keyword
+                   OR h.waterMeterId LIKE :keyword
+                   OR h.villageName LIKE :keyword)
+            """)
+    Page<Household> searchActiveByVillagesAndKeyword(
+            @Param("villageNames") List<String> villageNames,
+            @Param("keyword") String keyword,
+            Pageable pageable);
+
     /**
      * 按村名列表筛选活跃用户（分页）
      */
@@ -39,6 +54,15 @@ public interface HouseholdRepository extends JpaRepository<Household, Long>,
      */
     Page<Household> findByWaterMeterIdContainingAndIsActiveTrue(
             String waterMeterId, Pageable pageable);
+
+    @Query("""
+            SELECT h FROM Household h
+            WHERE h.isActive = true
+              AND (h.householdName LIKE :keyword
+                   OR h.waterMeterId LIKE :keyword
+                   OR h.villageName LIKE :keyword)
+            """)
+    Page<Household> searchActiveByKeyword(@Param("keyword") String keyword, Pageable pageable);
 
     /**
      * 分页查所有活跃用户

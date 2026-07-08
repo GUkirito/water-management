@@ -64,6 +64,10 @@ public class WaterBill {
     @Column(length = 500)
     private String note;
 
+    @Version
+    @Column(name = "version")
+    private Long version;
+
     /** 创建时间 */
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
