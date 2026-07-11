@@ -1,5 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod app_update;
+
 use std::{
     fs,
     io::{Read, Write},
@@ -21,14 +23,20 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
-use tauri_plugin_updater::UpdaterExt;
 
 type AppResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
-struct BackendState(Mutex<Option<Child>>);
+pub(crate) struct BackendState(Mutex<Option<Child>>);
+
+impl BackendState {
+    pub(crate) fn replace_child(&self, child: Child) -> Result<(), String> {
+        *self.0.lock().map_err(|_| "后端状态锁已损坏".to_string())? = Some(child);
+        Ok(())
+    }
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -72,7 +80,13 @@ fn main() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(BackendState(Mutex::new(None)))
-        .invoke_handler(tauri::generate_handler![check_app_update, restore_database])
+        .manage(app_update::AppUpdateState::default())
+        .invoke_handler(tauri::generate_handler![
+            app_update::check_app_update,
+            app_update::skip_app_update,
+            app_update::download_app_update,
+            restore_database
+        ])
         .setup(|app| {
             let candidates = path_candidates(app.path().resource_dir().ok());
             log_desktop(format!(
@@ -82,10 +96,9 @@ fn main() {
             let (port, child) = start_backend_with_retry(&candidates)?;
             log_desktop(format!("backend ready on port {port}"));
 
-            *app.state::<BackendState>()
-                .0
-                .lock()
-                .expect("BackendState mutex poisoned") = Some(child);
+            app.state::<BackendState>()
+                .replace_child(child)
+                .map_err(std::io::Error::other)?;
 
             let url = format!("http://127.0.0.1:{port}/");
             let saved_state = read_window_state(app);
@@ -107,14 +120,6 @@ fn main() {
 
             setup_tray(app)?;
             setup_shortcuts(app)?;
-
-            let handle = app.handle().clone();
-            let update_window = window.clone();
-            tauri::async_runtime::spawn(async move {
-                if let Err(error) = check_for_update(handle, update_window.clone()).await {
-                    notify_window_event(&update_window, "wm-update-error", &error.to_string());
-                }
-            });
 
             let health_window = window.clone();
             thread::spawn(move || match check_data_integrity(port) {
@@ -211,43 +216,6 @@ fn quit_app(app: &tauri::AppHandle) {
     app.exit(0);
 }
 
-async fn check_for_update(
-    app: tauri::AppHandle,
-    window: tauri::WebviewWindow,
-) -> tauri_plugin_updater::Result<()> {
-    if let Some(update) = app.updater()?.check().await? {
-        notify_window_event(
-            &window,
-            "wm-update-status",
-            "发现新版本，正在下载安装，完成后将自动重启。",
-        );
-        let bytes = update
-            .download(|_chunk_length, _content_length| {}, || {})
-            .await?;
-        notify_window_event(
-            &window,
-            "wm-update-status",
-            "Update downloaded. Closing backend and installing.",
-        );
-        let state = app.state::<BackendState>();
-        stop_backend(&state);
-        update.install(bytes)?;
-        app.restart();
-    }
-    Ok(())
-}
-
-#[tauri::command]
-async fn check_app_update(
-    app: tauri::AppHandle,
-    window: tauri::WebviewWindow,
-) -> Result<String, String> {
-    check_for_update(app, window)
-        .await
-        .map_err(|error| error.to_string())?;
-    Ok("当前已是最新版本".to_string())
-}
-
 #[tauri::command]
 fn restore_database(
     token: String,
@@ -275,7 +243,7 @@ fn restore_database(
 
     match start_backend_with_retry(&candidates) {
         Ok((port, child)) => {
-            *state.0.lock().map_err(|_| "后端状态锁已损坏".to_string())? = Some(child);
+            state.replace_child(child)?;
             if !accounting_health_endpoint_available(port) {
                 stop_backend(&state);
                 return rollback_after_restore_failure(
@@ -323,7 +291,7 @@ fn rollback_after_restore_failure(
         .map_err(|error| format!("{reason}；自动回滚失败: {error}"))?;
     let (port, child) = start_backend_with_retry(candidates)
         .map_err(|error| format!("{reason}；数据库已回滚，但后端重启失败: {error}"))?;
-    *state.0.lock().map_err(|_| "后端状态锁已损坏".to_string())? = Some(child);
+    state.replace_child(child)?;
     Ok(RestoreResult {
         status: "ROLLED_BACK".to_string(),
         message: format!("{reason}；系统已自动恢复原数据库"),
@@ -430,7 +398,7 @@ fn free_port() -> AppResult<u16> {
     Ok(listener.local_addr()?.port())
 }
 
-fn start_backend_with_retry(candidates: &[PathBuf]) -> AppResult<(u16, Child)> {
+pub(crate) fn start_backend_with_retry(candidates: &[PathBuf]) -> AppResult<(u16, Child)> {
     for attempt in 1..=5 {
         let port = free_port()?;
         let mut child = start_backend(port, candidates)?;
@@ -451,7 +419,21 @@ fn start_backend_with_retry(candidates: &[PathBuf]) -> AppResult<(u16, Child)> {
     Err("Backend did not start.".into())
 }
 
-fn path_candidates(resource_dir: Option<PathBuf>) -> Vec<PathBuf> {
+pub(crate) fn start_backend_on_port(port: u16, candidates: &[PathBuf]) -> AppResult<Child> {
+    let mut child = start_backend(port, candidates)?;
+    match wait_backend(port) {
+        Ok(()) => Ok(child),
+        Err(start_error) => match stop_child_checked(&mut child) {
+            Ok(()) => Err(start_error),
+            Err(cleanup_error) => Err(format!(
+                "{start_error}; failed to clean up backend process: {cleanup_error}"
+            )
+            .into()),
+        },
+    }
+}
+
+pub(crate) fn path_candidates(resource_dir: Option<PathBuf>) -> Vec<PathBuf> {
     let mut paths = Vec::new();
 
     if let Ok(exe) = std::env::current_exe() {
@@ -582,7 +564,7 @@ fn backend_temp_dir() -> Option<PathBuf> {
         .map(|home| home.join(".water-management").join("tmp"))
 }
 
-fn log_desktop(message: impl AsRef<str>) {
+pub(crate) fn log_desktop(message: impl AsRef<str>) {
     let Some(path) = desktop_log_path() else {
         return;
     };
@@ -679,7 +661,7 @@ fn notify_data_integrity_issues(window: &tauri::WebviewWindow, issues: &str) {
     notify_window_event(window, "wm-accounting-health", issues);
 }
 
-fn notify_window_event(window: &tauri::WebviewWindow, event: &str, detail: &str) {
+pub(crate) fn notify_window_event(window: &tauri::WebviewWindow, event: &str, detail: &str) {
     let Ok(detail) = serde_json::to_string(detail) else {
         return;
     };
@@ -718,7 +700,7 @@ fn save_window_state(window: &tauri::Window) {
     }
 }
 
-fn stop_backend(state: &BackendState) {
+pub(crate) fn stop_backend(state: &BackendState) {
     let Some(mut guard) = state.0.lock().ok() else {
         return;
     };
@@ -726,6 +708,47 @@ fn stop_backend(state: &BackendState) {
         let _ = child.kill();
         let _ = child.wait();
     }
+}
+
+fn stop_child_checked(child: &mut Child) -> Result<(), String> {
+    match child.try_wait() {
+        Ok(Some(_)) => return Ok(()),
+        Ok(None) => {}
+        Err(error) => return Err(format!("检查后台进程状态失败: {error}")),
+    }
+
+    if let Err(kill_error) = child.kill() {
+        return match child.try_wait() {
+            Ok(Some(_)) => Ok(()),
+            Ok(None) => Err(format!("终止后台进程失败: {kill_error}")),
+            Err(status_error) => Err(format!(
+                "终止后台进程失败: {kill_error}；再次检查进程状态失败: {status_error}"
+            )),
+        };
+    }
+
+    match child.wait() {
+        Ok(_) => Ok(()),
+        Err(wait_error) => match child.try_wait() {
+            Ok(Some(_)) => Ok(()),
+            Ok(None) => Err(format!("等待后台进程退出失败: {wait_error}")),
+            Err(status_error) => Err(format!(
+                "等待后台进程退出失败: {wait_error}；再次检查进程状态失败: {status_error}"
+            )),
+        },
+    }
+}
+
+pub(crate) fn stop_backend_checked(state: &BackendState) -> Result<(), String> {
+    let mut guard = state.0.lock().map_err(|_| "后端状态锁已损坏".to_string())?;
+    let Some(mut child) = guard.take() else {
+        return Err("未找到后台进程句柄，无法确认后台已退出".to_string());
+    };
+    if let Err(error) = stop_child_checked(&mut child) {
+        *guard = Some(child);
+        return Err(error);
+    }
+    Ok(())
 }
 
 #[cfg(test)]

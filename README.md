@@ -1,7 +1,7 @@
 # 村级自来水管理系统
 
 > Spring Boot 4.0 + Vue 3 + SQLite + JDK 25 + Tauri 2 全栈桌面应用
-> **当前版本：V1.7.6**
+> **当前版本：V1.7.7**
 
 ---
 
@@ -310,11 +310,17 @@ java -jar target/water-management-0.0.1-SNAPSHOT.jar  # 运行
 #### 方式二：单文件 EXE 安装包（推荐）
 
 ```bash
-# 双击运行，或在项目根目录执行
-build.bat
+# 在项目根目录执行
+build-tauri.bat
 
-# 产物在 installer/VillageWaterManagement-1.7.6.exe
-# 发给用户，双击安装即可，无需安装 Java 或任何依赖
+# 推荐使用 NSIS 安装包
+installer/村级自来水管理系统_1.7.7_x64-setup.exe
+
+# 也可使用 MSI 安装包
+installer/村级自来水管理系统_1.7.7_x64_zh-CN.msi
+
+# 同时生成对应安装包的 .sig 签名文件和 installer/latest.json，用于桌面端更新发布
+# 发布前请先更新项目根目录的 release-notes.txt
 ```
 
 ---
@@ -392,6 +398,7 @@ $env:WATER_SERVER_ADDRESS = "0.0.0.0"
 
 | 版本 | 主要变更 |
 |------|---------|
+| V1.7.7 | 桌面端更新改为用户确认后下载，增加跳过当前版本、下载进度、分阶段错误提示和 loopback ACL 修复 |
 | V1.7.6 | 强化 SQLite 备份恢复、抄表与月锁一致性、历史账务保护及统计口径 |
 | V1.7.5 | 引入 Tauri 2 桌面壳（原生窗口/快捷键/单实例/自动更新） |
 | V1.6.8 | 历史抄表批量导入、修复已知问题 |
@@ -401,6 +408,8 @@ $env:WATER_SERVER_ADDRESS = "0.0.0.0"
 | V1.6.1 | 报表中心水费/材料费双套完全隔离 |
 | V1.6.0 | 全面重构 UI 界面 |
 | V1.5.5 | 初始公开版本 |
+
+> **更新流程迁移说明：** V1.7.6 仍按旧逻辑自动获取 V1.7.7；从 V1.7.7 起，后续版本会先提示更新内容，只有用户确认后才开始下载和安装。
 
 ---
 

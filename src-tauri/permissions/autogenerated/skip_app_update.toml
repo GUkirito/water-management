@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-skip-app-update"
+description = "Enables the skip_app_update command without any pre-configured scope."
+commands.allow = ["skip_app_update"]
+
+[[permission]]
+identifier = "deny-skip-app-update"
+description = "Denies the skip_app_update command without any pre-configured scope."
+commands.deny = ["skip_app_update"]

@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main-local-backend",
+  "description": "Allow the main window served by the loopback backend to call required desktop commands.",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["http://127.0.0.1:*/*"]
+  },
+  "permissions": [
+    "allow-check-app-update",
+    "allow-skip-app-update",
+    "allow-download-app-update",
+    "allow-restore-database"
+  ]
+}

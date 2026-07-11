@@ -292,11 +292,15 @@ async function checkAppUpdate() {
   }
   checkingUpdate.value = true
   try {
-    const result = await invoke('check_app_update')
-    ElMessage.success(result || '当前已是最新版本')
+    const result = await invoke('check_app_update', { trigger: 'manual' })
+    if (result?.status === 'UP_TO_DATE') {
+      ElMessage.success('当前已是最新版本')
+    } else {
+      window.dispatchEvent(new CustomEvent('wm-show-app-update', { detail: result }))
+    }
   } catch (error) {
     console.warn('检查更新失败', error)
-    ElMessage.warning('检查更新失败：' + (error?.message || error))
+    window.dispatchEvent(new CustomEvent('wm-show-app-update-error', { detail: error }))
   } finally {
     checkingUpdate.value = false
   }
