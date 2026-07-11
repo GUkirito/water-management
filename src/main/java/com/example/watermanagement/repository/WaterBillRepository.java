@@ -20,6 +20,9 @@ public interface WaterBillRepository extends JpaRepository<WaterBill, Long> {
     Optional<WaterBill> findByWaterMeterIdAndBillYearAndBillMonth(
             String waterMeterId, Integer billYear, Integer billMonth);
 
+    List<WaterBill> findAllByWaterMeterIdAndBillYearAndBillMonth(
+            String waterMeterId, Integer billYear, Integer billMonth);
+
     /**
      * 查询某水表的所有水费账单
      */

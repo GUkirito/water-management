@@ -35,6 +35,8 @@ public class LocalOnlyOperationInterceptor implements HandlerInterceptor {
         if ("POST".equals(method) && "/api/material-records/batch-delete".equals(path)) return true;
         if ("DELETE".equals(method) && path.matches("/api/material-records/\\d+")) return true;
         if ("DELETE".equals(method) && "/api/accounting/month-locks".equals(path)) return true;
+        if ("POST".equals(method) && ("/api/accounting/health/repair/preview".equals(path)
+                || "/api/accounting/health/repair/execute".equals(path))) return true;
         return "POST".equals(method) && path.startsWith("/api/accounting/adjustments/");
     }
 

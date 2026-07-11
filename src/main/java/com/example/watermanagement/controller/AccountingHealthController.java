@@ -2,12 +2,18 @@ package com.example.watermanagement.controller;
 
 import com.example.watermanagement.dto.AccountingHealthIssue;
 import com.example.watermanagement.dto.AccountingAdjustmentRequest;
+import com.example.watermanagement.dto.AccountingRepairExecuteRequest;
+import com.example.watermanagement.dto.AccountingRepairPreview;
+import com.example.watermanagement.dto.AccountingRepairPreviewRequest;
+import com.example.watermanagement.dto.AccountingRepairResult;
 import com.example.watermanagement.dto.ApiResponse;
 import com.example.watermanagement.dto.MonthLockRequest;
 import com.example.watermanagement.entity.AccountingAdjustment;
 import com.example.watermanagement.entity.MonthLock;
 import com.example.watermanagement.service.AccountingControlService;
 import com.example.watermanagement.service.AccountingHealthService;
+import com.example.watermanagement.service.AccountingRepairService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,10 +33,23 @@ public class AccountingHealthController {
 
     private final AccountingHealthService accountingHealthService;
     private final AccountingControlService accountingControlService;
+    private final AccountingRepairService accountingRepairService;
 
     @GetMapping("/health-check")
     public ApiResponse<List<AccountingHealthIssue>> check() {
         return ApiResponse.ok(accountingHealthService.check());
+    }
+
+    @PostMapping("/health/repair/preview")
+    public ApiResponse<AccountingRepairPreview> previewRepair(
+            @Valid @RequestBody AccountingRepairPreviewRequest request) {
+        return ApiResponse.ok(accountingRepairService.preview(request));
+    }
+
+    @PostMapping("/health/repair/execute")
+    public ApiResponse<AccountingRepairResult> executeRepair(
+            @Valid @RequestBody AccountingRepairExecuteRequest request) {
+        return ApiResponse.ok("账务修复完成", accountingRepairService.execute(request));
     }
 
     @GetMapping("/month-locks")

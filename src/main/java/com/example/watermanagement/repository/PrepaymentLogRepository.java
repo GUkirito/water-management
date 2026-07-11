@@ -16,6 +16,8 @@ public interface PrepaymentLogRepository extends JpaRepository<PrepaymentLog, Lo
 
     boolean existsByBillId(Long billId);
 
+    List<PrepaymentLog> findByBillId(Long billId);
+
     @Query("select coalesce(sum(l.amount), 0) from PrepaymentLog l where l.waterMeterId = :waterMeterId")
     BigDecimal getBalance(@Param("waterMeterId") String waterMeterId);
 }
