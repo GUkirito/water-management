@@ -41,7 +41,7 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     public List<WaterBill> getPendingWaterBills(String waterMeterId) {
         // 返回所有未缴清的水费账单
-        return waterBillRepository.findByWaterMeterIdAndWaterStatusNot(waterMeterId, "已收");
+        return waterBillRepository.findPendingByWaterMeterId(waterMeterId);
     }
 
     @Override
@@ -122,6 +122,10 @@ public class PaymentServiceImpl implements PaymentService {
 
         // 计算各账单的未缴金额和总欠费
         for (WaterBill bill : bills) {
+            if ("无需缴费".equals(bill.getWaterStatus())) {
+                throw new BusinessException("账单 " + bill.getId()
+                        + "（" + bill.getBillYear() + "年" + bill.getBillMonth() + "月）无需缴费，不能重复收款");
+            }
             if ("已收".equals(bill.getWaterStatus())) {
                 throw new BusinessException("账单 " + bill.getId()
                         + "（" + bill.getBillYear() + "年" + bill.getBillMonth() + "月）已缴清，请勿重复缴费");

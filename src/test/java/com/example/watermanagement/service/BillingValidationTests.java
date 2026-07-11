@@ -18,6 +18,7 @@ import com.example.watermanagement.exception.BusinessException;
 import com.example.watermanagement.repository.HouseholdRepository;
 import com.example.watermanagement.repository.MaterialPaymentRepository;
 import com.example.watermanagement.repository.MaterialRecordRepository;
+import com.example.watermanagement.repository.MonthLockRepository;
 import com.example.watermanagement.repository.PaymentRepository;
 import com.example.watermanagement.repository.PrepaymentLogRepository;
 import com.example.watermanagement.repository.ReadingRepository;
@@ -82,6 +83,9 @@ class BillingValidationTests {
     private ReadingRepository readingRepository;
 
     @Autowired
+    private MonthLockRepository monthLockRepository;
+
+    @Autowired
     private HouseholdRepository householdRepository;
 
     @Autowired
@@ -89,6 +93,7 @@ class BillingValidationTests {
 
     @BeforeEach
     void cleanDatabase() {
+        monthLockRepository.deleteAll();
         prepaymentLogRepository.deleteAll();
         paymentRepository.deleteAll();
         readingRepository.deleteAll();
@@ -161,6 +166,71 @@ class BillingValidationTests {
                 .hasMessageContaining("均已缴清");
         assertThat(paymentRepository.count()).isZero();
         assertThat(prepaymentLogRepository.getBalance("WM-ZERO-DUE")).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    void waterPaymentRejectsNoPaymentRequiredBill() {
+        WaterBill bill = waterBillRepository.save(WaterBill.builder()
+                .waterMeterId("WM-NO-PAYMENT")
+                .billYear(2026)
+                .billMonth(7)
+                .waterAmount(BigDecimal.ZERO)
+                .waterCharge(new BigDecimal("0.00"))
+                .actualWaterPaid(new BigDecimal("0.00"))
+                .waterStatus("无需缴费")
+                .build());
+        prepaymentLogRepository.save(PrepaymentLog.builder()
+                .waterMeterId("WM-NO-PAYMENT")
+                .amount(new BigDecimal("8.00"))
+                .type("OVERPAYMENT")
+                .build());
+
+        PaymentRequest request = waterPayment(List.of(bill.getId()), new BigDecimal("1.00"));
+
+        assertThatThrownBy(() -> paymentService.pay(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("无需缴费");
+        assertThat(paymentRepository.count()).isZero();
+        WaterBill unchanged = waterBillRepository.findById(bill.getId()).orElseThrow();
+        assertThat(unchanged.getActualWaterPaid()).isEqualByComparingTo("0.00");
+        assertThat(unchanged.getWaterStatus()).isEqualTo("无需缴费");
+        assertThat(prepaymentLogRepository.findByWaterMeterIdOrderByCreatedAtDesc("WM-NO-PAYMENT"))
+                .extracting(PrepaymentLog::getType)
+                .containsExactly("OVERPAYMENT");
+        assertThat(prepaymentLogRepository.getBalance("WM-NO-PAYMENT"))
+                .isEqualByComparingTo("8.00");
+    }
+
+    @Test
+    void meterPendingBillsExcludeNoPaymentRequiredAndKeepPositiveDueBills() {
+        saveWaterBill("WM-PENDING", 5, "0.00", "0.00", "无需缴费");
+        WaterBill unpaid = saveWaterBill("WM-PENDING", 6, "18.00", "0.00", "未收");
+        WaterBill partial = saveWaterBill("WM-PENDING", 7, "18.00", "8.00", "部分收");
+
+        List<WaterBill> bills = paymentService.getPendingWaterBills("WM-PENDING");
+
+        assertThat(bills).extracting(WaterBill::getId)
+                .containsExactlyInAnyOrder(unpaid.getId(), partial.getId());
+    }
+
+    @Test
+    void pendingBillListExcludeNoPaymentRequiredAndKeepPositiveDueBills() {
+        householdRepository.save(Household.builder()
+                .householdName("待缴测试户")
+                .waterMeterId("WM-PENDING-LIST")
+                .villageName("测试村")
+                .phone("")
+                .isActive(true)
+                .build());
+        saveWaterBill("WM-PENDING-LIST", 5, "0.00", "0.00", "无需缴费");
+        WaterBill unpaid = saveWaterBill("WM-PENDING-LIST", 6, "18.00", "0.00", "未收");
+        WaterBill partial = saveWaterBill("WM-PENDING-LIST", 7, "18.00", "8.00", "部分收");
+
+        List<PendingWaterBillRow> rows = paymentService.listPendingWaterBills(
+                "测试村", null, 2026, null);
+
+        assertThat(rows).extracting(PendingWaterBillRow::getId)
+                .containsExactlyInAnyOrder(unpaid.getId(), partial.getId());
     }
 
     @Test
@@ -647,6 +717,18 @@ class BillingValidationTests {
         request.setPaymentMethod("现金");
         request.setOperator("tester");
         return request;
+    }
+
+    private WaterBill saveWaterBill(String meterId, int month, String charge, String paid, String status) {
+        return waterBillRepository.save(WaterBill.builder()
+                .waterMeterId(meterId)
+                .billYear(2026)
+                .billMonth(month)
+                .waterAmount(new BigDecimal(charge))
+                .waterCharge(new BigDecimal(charge))
+                .actualWaterPaid(new BigDecimal(paid))
+                .waterStatus(status)
+                .build());
     }
 
     private HouseholdRequest householdRequest(String name, String meterId, String village) {

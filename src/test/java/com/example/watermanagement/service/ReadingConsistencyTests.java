@@ -33,6 +33,8 @@ class ReadingConsistencyTests {
     @Autowired
     private ReadingService readingService;
     @Autowired
+    private ReadingWriteService readingWriteService;
+    @Autowired
     private HouseholdRepository householdRepository;
     @Autowired
     private ReadingRepository readingRepository;
@@ -146,6 +148,60 @@ class ReadingConsistencyTests {
                 "M-PRICE", 2026, 7).orElseThrow();
         assertThat(bill.getWaterPrice()).isEqualByComparingTo("1.80");
         assertThat(bill.getWaterCharge()).isEqualByComparingTo("21.60");
+    }
+
+    @Test
+    void inactiveHouseholdCannotSaveReadingOrBill() {
+        householdRepository.save(Household.builder()
+                .householdName("停用户")
+                .waterMeterId("M-INACTIVE")
+                .villageName("测试村")
+                .phone("")
+                .isActive(false)
+                .build());
+        prepaymentLogRepository.save(com.example.watermanagement.entity.PrepaymentLog.builder()
+                .waterMeterId("M-INACTIVE")
+                .amount(bd("10.00"))
+                .type("OVERPAYMENT")
+                .build());
+
+        assertThatThrownBy(() -> readingWriteService.saveRow(
+                "M-INACTIVE", bd("10"), LocalDate.of(2026, 7, 5),
+                null, null, bd("1.80"), bd("100")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("停用");
+        assertThat(readingRepository.findAll()).isEmpty();
+        assertThat(waterBillRepository.findAll()).isEmpty();
+        assertThat(paymentRepository.findAll()).isEmpty();
+        assertThat(prepaymentLogRepository.findByWaterMeterIdOrderByCreatedAtDesc("M-INACTIVE"))
+                .extracting(com.example.watermanagement.entity.PrepaymentLog::getType)
+                .containsExactly("OVERPAYMENT");
+        assertThat(prepaymentLogRepository.getBalance("M-INACTIVE"))
+                .isEqualByComparingTo("10.00");
+    }
+
+    @Test
+    void zeroUsageSavesNoPaymentRequiredBillWithoutUsingPrepayment() {
+        household("M-ZERO-USAGE");
+        prepaymentLogRepository.save(com.example.watermanagement.entity.PrepaymentLog.builder()
+                .waterMeterId("M-ZERO-USAGE")
+                .amount(bd("10.00"))
+                .type("OVERPAYMENT")
+                .build());
+
+        readingWriteService.saveRow(
+                "M-ZERO-USAGE", BigDecimal.ZERO, LocalDate.of(2026, 7, 5),
+                null, null, bd("1.80"), bd("100"));
+
+        assertThat(readingRepository.findAll()).hasSize(1);
+        WaterBill bill = waterBillRepository.findByWaterMeterIdAndBillYearAndBillMonth(
+                "M-ZERO-USAGE", 2026, 7).orElseThrow();
+        assertThat(bill.getWaterCharge()).isEqualByComparingTo("0.00");
+        assertThat(bill.getActualWaterPaid()).isEqualByComparingTo("0.00");
+        assertThat(bill.getWaterStatus()).isEqualTo("无需缴费");
+        assertThat(prepaymentLogRepository.findByWaterMeterIdOrderByCreatedAtDesc("M-ZERO-USAGE"))
+                .extracting(com.example.watermanagement.entity.PrepaymentLog::getType)
+                .containsExactly("OVERPAYMENT");
     }
 
     private void household(String meterId) {

@@ -1,6 +1,7 @@
 package com.example.watermanagement.service.impl;
 
 import com.example.watermanagement.entity.PrepaymentLog;
+import com.example.watermanagement.entity.Household;
 import com.example.watermanagement.entity.Reading;
 import com.example.watermanagement.entity.WaterBill;
 import com.example.watermanagement.exception.BusinessException;
@@ -59,8 +60,11 @@ public class ReadingWriteServiceImpl implements ReadingWriteService {
         }
         accountingWriteGuard.requireUnlocked(readingDate);
         accountingWriteGuard.requireNonNegativeChargeableUsage(chargeableUsage);
-        householdRepository.findByWaterMeterId(waterMeterId)
+        Household household = householdRepository.findByWaterMeterId(waterMeterId)
                 .orElseThrow(() -> new BusinessException("水表不存在: " + waterMeterId));
+        if (!Boolean.TRUE.equals(household.getIsActive())) {
+            throw new BusinessException("该住户已停用，不能新增抄表记录: " + waterMeterId);
+        }
 
         Reading sameDay = readingRepository.findByWaterMeterIdAndReadingDate(waterMeterId, readingDate)
                 .orElse(null);
@@ -171,6 +175,7 @@ public class ReadingWriteServiceImpl implements ReadingWriteService {
     }
 
     private String status(BigDecimal paid, BigDecimal total) {
+        if (total.signum() == 0) return "无需缴费";
         if (paid.signum() == 0) return "未收";
         if (paid.compareTo(total) >= 0) return "已收";
         return "部分收";
