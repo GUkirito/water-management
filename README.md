@@ -1,7 +1,7 @@
 # 村级自来水管理系统
 
 > Spring Boot 4.0 + Vue 3 + SQLite + JDK 25 + Tauri 2 全栈桌面应用
-> **当前版本：V1.7.7**
+> **当前版本：V1.7.8**
 
 ---
 
@@ -314,10 +314,10 @@ java -jar target/water-management-0.0.1-SNAPSHOT.jar  # 运行
 build-tauri.bat
 
 # 推荐使用 NSIS 安装包
-installer/村级自来水管理系统_1.7.7_x64-setup.exe
+installer/村级自来水管理系统_1.7.8_x64-setup.exe
 
 # 也可使用 MSI 安装包
-installer/村级自来水管理系统_1.7.7_x64_zh-CN.msi
+installer/村级自来水管理系统_1.7.8_x64_zh-CN.msi
 
 # 同时生成对应安装包的 .sig 签名文件和 installer/latest.json，用于桌面端更新发布
 # 发布前请先更新项目根目录的 release-notes.txt
@@ -398,6 +398,7 @@ $env:WATER_SERVER_ADDRESS = "0.0.0.0"
 
 | 版本 | 主要变更 |
 |------|---------|
+| V1.7.8 | 启动检查更新失败后冷却 24 小时，冷却期间不再重复请求或提示；设置页手动检查不受影响 |
 | V1.7.7 | 桌面端更新改为用户确认后下载，增加跳过当前版本、下载进度、分阶段错误提示和 loopback ACL 修复 |
 | V1.7.6 | 强化 SQLite 备份恢复、抄表与月锁一致性、历史账务保护及统计口径 |
 | V1.7.5 | 引入 Tauri 2 桌面壳（原生窗口/快捷键/单实例/自动更新） |
