@@ -53,4 +53,8 @@ installer/
 .DS_Store
 Thumbs.db
 
+### superpower ##
+docs/
+.superpowers/
+
 *.bat
