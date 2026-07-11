@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
@@ -352,6 +353,43 @@ class AccountingRepairServiceTests {
                 .hasMessageContaining("复检未通过");
 
         assertUnchanged(data);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"PAYMENT_TOTAL_MISMATCH", "INCONSISTENT_WATER_BILL_STATUS"})
+    void affectedDestinationBillIssueRemainingAfterRepairRollsBackEverything(String issueType) {
+        CaseData data = createCrossMeterCase();
+        doReturn(List.of(new AccountingHealthIssue(
+                issueType, "ERROR", "water_bill", data.correctBill().getId(),
+                data.correctBill().getWaterMeterId(), "still mismatched")))
+                .when(accountingHealthService).check();
+
+        assertThatThrownBy(() -> accountingRepairService.execute(executeRequest(data.wrongBill().getId())))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("复检未通过");
+
+        assertUnchanged(data);
+    }
+
+    @Test
+    void unrelatedHealthIssuesRemainWithoutRollingBackRepair() {
+        CaseData data = createCrossMeterCase();
+        List<AccountingHealthIssue> unrelatedIssues = List.of(
+                new AccountingHealthIssue(
+                        "ORPHAN_WATER_BILL", "ERROR", "water_bill", data.correctBill().getId(),
+                        data.correctBill().getWaterMeterId(), "unrelated type"),
+                new AccountingHealthIssue(
+                        "PAYMENT_TOTAL_MISMATCH", "ERROR", "water_bill", 99999L,
+                        "OTHER-METER", "unrelated bill"));
+        doReturn(unrelatedIssues).when(accountingHealthService).check();
+
+        AccountingRepairResult result = accountingRepairService.execute(
+                executeRequest(data.wrongBill().getId()));
+
+        assertThat(result.getRemainingIssues()).containsExactlyElementsOf(unrelatedIssues);
+        assertThat(prepaymentLogRepository.findById(data.log().getId()).orElseThrow().getBillId())
+                .isEqualTo(data.correctBill().getId());
+        assertThat(auditRepository.count()).isEqualTo(1);
     }
 
     @Test

@@ -20,10 +20,16 @@ import tools.jackson.databind.ObjectMapper;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 class AccountingRepairTransactionExecutor {
+
+    private static final Set<String> REPAIR_RELATED_ISSUE_TYPES = Set.of(
+            "PAYMENT_TOTAL_MISMATCH",
+            "INCONSISTENT_WATER_BILL_STATUS");
 
     private final AccountingRepairPlanner planner;
     private final PrepaymentLogRepository prepaymentLogRepository;
@@ -82,10 +88,14 @@ class AccountingRepairTransactionExecutor {
                 .build());
 
         List<AccountingHealthIssue> remainingIssues = accountingHealthService.check();
-        boolean targetIssueRemains = remainingIssues.stream().anyMatch(issue ->
-                Objects.equals(issue.getType(), request.getIssueType())
-                        && Objects.equals(issue.getRefId(), request.getRefId()));
-        if (targetIssueRemains) {
+        Set<Long> affectedBillIds = currentPlan.billUpdates().stream()
+                .map(update -> update.before().id())
+                .collect(Collectors.toUnmodifiableSet());
+        boolean relatedIssueRemains = remainingIssues.stream().anyMatch(issue ->
+                "water_bill".equals(issue.getRefType())
+                        && affectedBillIds.contains(issue.getRefId())
+                        && REPAIR_RELATED_ISSUE_TYPES.contains(issue.getType()));
+        if (relatedIssueRemains) {
             throw new BusinessException("账务修复复检未通过，所有修改已回滚");
         }
         return new AccountingRepairExecutionOutcome(audit, List.copyOf(remainingIssues));
