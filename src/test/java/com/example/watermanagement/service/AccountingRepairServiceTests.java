@@ -42,7 +42,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @SpringBootTest
@@ -79,6 +81,7 @@ class AccountingRepairServiceTests {
 
         assertThat(preview.isRepairable()).isTrue();
         assertThat(preview.isSnapshotRequired()).isTrue();
+        assertThat(preview.getPreviewToken()).isNotBlank();
         assertThat(prepaymentLogRepository.findById(data.log().getId()).orElseThrow().getBillId())
                 .isEqualTo(data.wrongBill().getId());
         assertThat(waterBillRepository.findById(data.correctBill().getId()).orElseThrow().getActualWaterPaid())
@@ -114,6 +117,7 @@ class AccountingRepairServiceTests {
         AccountingRepairPreview preview = accountingRepairService.preview(request(data.wrongBill().getId()));
 
         assertThat(preview.isRepairable()).isFalse();
+        assertThat(preview.getPreviewToken()).isNull();
         assertThat(preview.getCause()).contains("付款流水", "人工核对");
         assertThat(auditRepository.count()).isZero();
     }
@@ -226,7 +230,7 @@ class AccountingRepairServiceTests {
 
         AccountingRepairResult result = accountingRepairService.execute(new AccountingRepairExecuteRequest(
                 "INCONSISTENT_WATER_BILL_STATUS", "water_bill", bill.getId(),
-                "测试员", "修复错误收款状态"));
+                preview.getPreviewToken(), "测试员", "修复错误收款状态"));
 
         WaterBill repaired = waterBillRepository.findById(bill.getId()).orElseThrow();
         assertThat(repaired.getActualWaterPaid()).isEqualByComparingTo("14.40");
@@ -305,14 +309,87 @@ class AccountingRepairServiceTests {
     @Test
     void executeRejectsWhenPreviewedProblemHasChanged() {
         CaseData data = createCrossMeterCase();
-        assertThat(accountingRepairService.preview(request(data.wrongBill().getId())).isRepairable()).isTrue();
+        AccountingRepairPreview preview = accountingRepairService.preview(request(data.wrongBill().getId()));
+        assertThat(preview.isRepairable()).isTrue();
         prepaymentLogRepository.delete(data.log());
 
-        assertThatThrownBy(() -> accountingRepairService.execute(executeRequest(data.wrongBill().getId())))
+        assertThatThrownBy(() -> accountingRepairService.execute(
+                executeRequest(data.wrongBill().getId(), preview.getPreviewToken())))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("数据已变化");
+                .hasMessageContaining("重新查看处理方式");
 
         assertThat(auditRepository.count()).isZero();
+    }
+
+    @Test
+    void executeRejectsBeforeSnapshotWhenPreviewedPlanChangesButRemainsRepairable() {
+        CaseData data = createCrossMeterCase();
+        AccountingRepairPreview preview = accountingRepairService.preview(request(data.wrongBill().getId()));
+        assertBillState(preview.getAfter(), data.wrongBill().getId(), "14.40", "已收", "0.00");
+
+        Payment changedPayment = paymentRepository.findById(data.payment().getId()).orElseThrow();
+        changedPayment.setAmount(new BigDecimal("13.40"));
+        paymentRepository.saveAndFlush(changedPayment);
+
+        assertThatThrownBy(() -> accountingRepairService.execute(
+                executeRequest(data.wrongBill().getId(), preview.getPreviewToken())))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("重新查看处理方式");
+
+        verify(databaseSnapshotService, never()).createVerifiedSnapshot("accounting-repair");
+        assertBillUnchanged(data);
+        assertThat(prepaymentLogRepository.findById(data.log().getId()).orElseThrow().getBillId())
+                .isEqualTo(data.wrongBill().getId());
+        assertThat(paymentRepository.findById(data.payment().getId()).orElseThrow().getAmount())
+                .isEqualByComparingTo("13.40");
+        assertThat(auditRepository.count()).isZero();
+    }
+
+    @Test
+    void forgedPreviewConfirmationIsRejectedBeforeSnapshot() {
+        CaseData data = createCrossMeterCase();
+
+        assertThatThrownBy(() -> accountingRepairService.execute(
+                executeRequest(data.wrongBill().getId(), "not-issued-by-server")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("重新查看处理方式");
+
+        verify(databaseSnapshotService, never()).createVerifiedSnapshot("accounting-repair");
+        assertUnchanged(data);
+    }
+
+    @Test
+    void previewConfirmationCannotBeUsedTwice() {
+        CaseData data = createCrossMeterCase();
+        AccountingRepairPreview preview = accountingRepairService.preview(request(data.wrongBill().getId()));
+        AccountingRepairExecuteRequest executeRequest =
+                executeRequest(data.wrongBill().getId(), preview.getPreviewToken());
+
+        accountingRepairService.execute(executeRequest);
+
+        assertThatThrownBy(() -> accountingRepairService.execute(executeRequest))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("重新查看处理方式");
+        verify(databaseSnapshotService).createVerifiedSnapshot("accounting-repair");
+        assertThat(auditRepository.count()).isEqualTo(1);
+    }
+
+    @Test
+    void snapshotFailureConsumesPreviewConfirmation() {
+        CaseData data = createCrossMeterCase();
+        AccountingRepairPreview preview = accountingRepairService.preview(request(data.wrongBill().getId()));
+        AccountingRepairExecuteRequest executeRequest =
+                executeRequest(data.wrongBill().getId(), preview.getPreviewToken());
+        when(databaseSnapshotService.createVerifiedSnapshot("accounting-repair"))
+                .thenThrow(new BusinessException("创建数据库一致性备份失败"));
+
+        assertThatThrownBy(() -> accountingRepairService.execute(executeRequest))
+                .hasMessageContaining("备份失败");
+        assertThatThrownBy(() -> accountingRepairService.execute(executeRequest))
+                .hasMessageContaining("重新查看处理方式");
+
+        verify(databaseSnapshotService).createVerifiedSnapshot("accounting-repair");
+        assertUnchanged(data);
     }
 
     @Test
@@ -458,8 +535,14 @@ class AccountingRepairServiceTests {
     }
 
     private AccountingRepairExecuteRequest executeRequest(Long billId) {
+        AccountingRepairPreview preview = accountingRepairService.preview(request(billId));
+        return executeRequest(billId, preview.getPreviewToken());
+    }
+
+    private AccountingRepairExecuteRequest executeRequest(Long billId, String previewToken) {
         return new AccountingRepairExecuteRequest(
-                "PAYMENT_TOTAL_MISMATCH", "water_bill", billId, "测试员", "修复错绑预存流水");
+                "PAYMENT_TOTAL_MISMATCH", "water_bill", billId, previewToken,
+                "测试员", "修复错绑预存流水");
     }
 
     private void assertUnchanged(CaseData data) {

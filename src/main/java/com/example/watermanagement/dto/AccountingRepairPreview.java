@@ -20,4 +20,5 @@ public class AccountingRepairPreview {
     private Map<String, Object> after;
     private List<AccountingRepairAffectedRecord> affectedRecords;
     private boolean snapshotRequired;
+    private String previewToken;
 }

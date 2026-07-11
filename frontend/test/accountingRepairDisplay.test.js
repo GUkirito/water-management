@@ -2,8 +2,11 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   affectedRecordText,
+  buildRepairExecutionRequest,
   createLatestRequestGate,
   healthIssuesFromRepairResult,
+  repairDisplayData,
+  repairNeedsNewPreview,
   repairChangeRows,
   repairNavigation
 } from '../src/utils/accountingRepairDisplay.js'
@@ -104,4 +107,40 @@ test('修复完成直接采用事务内复检结果', () => {
 
   assert.equal(healthIssuesFromRepairResult({ remainingIssues }), remainingIssues)
   assert.deepEqual(healthIssuesFromRepairResult({}), [])
+})
+
+test('修复执行只提交服务端发放的本次确认信息', () => {
+  assert.deepEqual(
+    buildRepairExecutionRequest(
+      { issueType: 'PAYMENT_TOTAL_MISMATCH', refType: 'water_bill', refId: 1, previewToken: 'opaque-value' },
+      '测试员',
+      '修复错绑流水'
+    ),
+    {
+      issueType: 'PAYMENT_TOTAL_MISMATCH',
+      refType: 'water_bill',
+      refId: 1,
+      previewToken: 'opaque-value',
+      operator: '测试员',
+      reason: '修复错绑流水'
+    }
+  )
+  assert.equal(buildRepairExecutionRequest({ repairable: true }, '测试员', '原因'), null)
+})
+
+test('修复成功后展示执行响应中的实际变化', () => {
+  const oldPreview = { before: { value: 1 }, after: { value: 2 } }
+  const actualResult = { before: { value: 3 }, after: { value: 4 } }
+
+  assert.equal(repairDisplayData(oldPreview, null), oldPreview)
+  assert.equal(repairDisplayData(oldPreview, actualResult), actualResult)
+})
+
+test('服务端要求重新查看时退出旧确认状态', () => {
+  assert.equal(repairNeedsNewPreview({ message: '账务数据已变化，请重新查看处理方式后再操作' }), true)
+  assert.equal(repairNeedsNewPreview({
+    message: 'Request failed with status code 400',
+    response: { data: { message: '账务数据或确认内容已变化，请重新查看处理方式后再操作' } }
+  }), true)
+  assert.equal(repairNeedsNewPreview({ message: '创建数据库一致性备份失败' }), false)
 })

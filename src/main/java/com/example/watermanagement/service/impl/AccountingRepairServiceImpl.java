@@ -18,13 +18,20 @@ import java.nio.file.Path;
 public class AccountingRepairServiceImpl implements AccountingRepairService {
 
     private final AccountingRepairPlanner planner;
+    private final AccountingRepairPreviewRegistry previewRegistry;
     private final DatabaseSnapshotService databaseSnapshotService;
     private final AccountingRepairTransactionExecutor transactionExecutor;
 
     @Override
     @Transactional(readOnly = true)
     public AccountingRepairPreview preview(AccountingRepairPreviewRequest request) {
-        return planner.plan(request).preview();
+        AccountingRepairPlan plan = planner.plan(request);
+        AccountingRepairPreview preview = plan.preview();
+        if (preview.isRepairable()) {
+            preview.setPreviewToken(previewRegistry.register(
+                    preview.getIssueType(), preview.getRefType(), preview.getRefId(), plan.signature()));
+        }
+        return preview;
     }
 
     @Override
@@ -33,8 +40,11 @@ public class AccountingRepairServiceImpl implements AccountingRepairService {
         AccountingRepairPreviewRequest previewRequest = new AccountingRepairPreviewRequest(
                 request.getIssueType(), request.getRefType(), request.getRefId());
         AccountingRepairPlan plan = planner.plan(previewRequest);
+        previewRegistry.consume(
+                request.getPreviewToken(), request.getIssueType(), request.getRefType(), request.getRefId(),
+                plan.signature());
         if (!plan.preview().isRepairable()) {
-            throw new BusinessException("数据已变化或无法安全修复：" + plan.preview().getCause());
+            throw new BusinessException("账务数据已变化，请重新查看处理方式后再操作");
         }
 
         Path snapshot = databaseSnapshotService.createVerifiedSnapshot("accounting-repair");
@@ -48,6 +58,9 @@ public class AccountingRepairServiceImpl implements AccountingRepairService {
     }
 
     private void validateOperatorAndReason(AccountingRepairExecuteRequest request) {
+        if (request == null || request.getPreviewToken() == null || request.getPreviewToken().isBlank()) {
+            throw new BusinessException("请重新查看处理方式后再操作");
+        }
         if (request == null || request.getOperator() == null || request.getOperator().isBlank()) {
             throw new BusinessException("操作人不能为空");
         }

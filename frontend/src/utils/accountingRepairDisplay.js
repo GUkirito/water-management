@@ -116,3 +116,27 @@ export function createLatestRequestGate() {
 export function healthIssuesFromRepairResult(result = {}) {
   return Array.isArray(result.remainingIssues) ? result.remainingIssues : []
 }
+
+export function buildRepairExecutionRequest(preview, operator, reason) {
+  if (!preview?.previewToken) return null
+  return {
+    issueType: preview.issueType,
+    refType: preview.refType,
+    refId: preview.refId,
+    previewToken: preview.previewToken,
+    operator,
+    reason
+  }
+}
+
+export function repairDisplayData(preview, result) {
+  return result || preview
+}
+
+export function repairErrorMessage(error, fallback = '') {
+  return error?.response?.data?.message || error?.message || fallback
+}
+
+export function repairNeedsNewPreview(error) {
+  return String(repairErrorMessage(error)).includes('重新查看处理方式')
+}

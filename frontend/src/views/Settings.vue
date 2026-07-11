@@ -202,7 +202,7 @@
           v-if="repairPreview?.repairable && !repairResult"
           type="danger"
           :loading="executingRepair"
-          :disabled="executingRepair"
+          :disabled="executingRepair || !repairPreview.previewToken"
           @click="executeRepair"
         >
           备份并修复
@@ -297,9 +297,13 @@ import {
 } from '@/utils/accountingHealthDisplay'
 import {
   affectedRecordText,
+  buildRepairExecutionRequest,
   createLatestRequestGate,
   healthIssuesFromRepairResult,
   repairChangeRows,
+  repairDisplayData,
+  repairErrorMessage,
+  repairNeedsNewPreview,
   repairNavigation
 } from '@/utils/accountingRepairDisplay'
 import { formatLocalMonth, formatLocalTimestamp } from '@/utils/localDate'
@@ -340,7 +344,10 @@ const adjustmentForm = ref({
   operator: '管理员'
 })
 const isTauriEnv = typeof window !== 'undefined' && !!window.__TAURI__
-const repairChanges = computed(() => repairChangeRows(repairPreview.value?.before, repairPreview.value?.after))
+const repairChanges = computed(() => {
+  const display = repairDisplayData(repairPreview.value, repairResult.value)
+  return repairChangeRows(display?.before, display?.after)
+})
 const repairNavigationTarget = computed(() => repairNavigation(repairPreview.value?.issueType || selectedHealthIssue.value?.type))
 
 async function saveConfig() {
@@ -488,24 +495,32 @@ async function executeRepair() {
     ElMessage.warning('请填写操作人和修复原因')
     return
   }
+  const request = buildRepairExecutionRequest(repairPreview.value, operator, reason)
+  if (!request) {
+    ElMessage.warning('当前处理方式已失效，请重新查看处理方式')
+    return
+  }
   if (executingRepair.value) return
 
   executingRepair.value = true
+  repairPreview.value.previewToken = null
   try {
-    const result = await accountingApi.repairExecute({
-      issueType: repairPreview.value.issueType,
-      refType: repairPreview.value.refType,
-      refId: repairPreview.value.refId,
-      operator,
-      reason
-    })
+    const result = await accountingApi.repairExecute(request)
     repairResult.value = result
     healthIssues.value = healthIssuesFromRepairResult(result)
     healthChecked.value = true
     ElMessage.success('账务修复完成，已重新检查')
   } catch (error) {
     console.warn('账务修复失败', error)
-    ElMessage.error('修复失败：' + (error?.message || '数据可能已变化，请重新检查'))
+    if (repairNeedsNewPreview(error)) {
+      invalidateRepairPreview()
+      repairPreview.value = null
+      repairResult.value = null
+      repairDialogVisible.value = false
+      ElMessage.warning(repairErrorMessage(error))
+    } else {
+      ElMessage.error('修复失败：' + repairErrorMessage(error, '请重新查看处理方式后再试'))
+    }
   } finally {
     executingRepair.value = false
   }

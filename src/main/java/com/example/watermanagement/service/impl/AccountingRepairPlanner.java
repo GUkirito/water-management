@@ -151,7 +151,7 @@ class AccountingRepairPlanner {
                 : "预存抵扣流水误关联到其他住户的账单，将重绑到唯一的同水表同月份账单并重算两张账单";
         AccountingRepairPreview preview = new AccountingRepairPreview(
                 request.getIssueType(), request.getRefType(), request.getRefId(), true, cause,
-                before, after, affectedRecords(moves, updates), true);
+                before, after, affectedRecords(moves, updates), true, null);
         String signature = moves + "|" + updates + "|" + payments + "|" + prepayments;
         return new AccountingRepairPlan(preview, List.copyOf(moves), List.copyOf(updates),
                 List.copyOf(payments), List.copyOf(prepayments), signature);
@@ -266,7 +266,7 @@ class AccountingRepairPlanner {
         String refType = request == null ? null : request.getRefType();
         Long refId = request == null ? null : request.getRefId();
         AccountingRepairPreview preview = new AccountingRepairPreview(
-                issueType, refType, refId, false, cause, Map.of(), Map.of(), List.of(), false);
+                issueType, refType, refId, false, cause, Map.of(), Map.of(), List.of(), false, null);
         return new AccountingRepairPlan(preview, List.of(), List.of(), List.of(), List.of(), "UNREPAIRABLE");
     }
 

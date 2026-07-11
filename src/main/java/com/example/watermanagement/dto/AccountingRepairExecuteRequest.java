@@ -19,6 +19,9 @@ public class AccountingRepairExecuteRequest {
     @NotNull(message = "记录编号不能为空")
     private Long refId;
 
+    @NotBlank(message = "请重新查看处理方式后再操作")
+    private String previewToken;
+
     @NotBlank(message = "操作人不能为空")
     private String operator;
 

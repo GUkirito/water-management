@@ -42,7 +42,7 @@ class AccountingRepairControllerTests {
     void previewEndpointReturnsRepairPlan() throws Exception {
         when(repairService.preview(any())).thenReturn(new AccountingRepairPreview(
                 "PAYMENT_TOTAL_MISMATCH", "water_bill", 1L, true, "可安全修复",
-                Map.of(), Map.of(), List.of(), true));
+                Map.of(), Map.of(), List.of(), true, "opaque-preview-value"));
 
         mockMvc.perform(post("/api/accounting/health/repair/preview")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -50,7 +50,20 @@ class AccountingRepairControllerTests {
                                 {"issueType":"PAYMENT_TOTAL_MISMATCH","refType":"water_bill","refId":1}
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.repairable").value(true));
+                .andExpect(jsonPath("$.data.repairable").value(true))
+                .andExpect(jsonPath("$.data.previewToken").value("opaque-preview-value"));
+    }
+
+    @Test
+    void executeRejectsMissingPreviewConfirmationWithChineseMessage() throws Exception {
+        mockMvc.perform(post("/api/accounting/health/repair/execute")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"issueType":"PAYMENT_TOTAL_MISMATCH","refType":"water_bill","refId":1,
+                                 "operator":"测试员","reason":"修复错绑流水"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("请重新查看处理方式")));
     }
 
     @Test
@@ -86,6 +99,7 @@ class AccountingRepairControllerTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"issueType":"PAYMENT_TOTAL_MISMATCH","refType":"water_bill","refId":1,
+                                 "previewToken":"opaque-preview-value",
                                  "operator":"测试员","reason":"修复错绑流水"}
                                 """))
                 .andExpect(status().isOk())
