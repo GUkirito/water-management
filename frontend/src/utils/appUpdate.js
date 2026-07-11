@@ -2,6 +2,10 @@ export function shouldShowUpdate(result) {
   return result?.status === 'AVAILABLE'
 }
 
+export function getUpdateCheckFailurePresentation(trigger) {
+  return trigger === 'startup' ? 'notification' : 'dialog'
+}
+
 export function formatBytes(bytes) {
   if (!Number.isFinite(bytes) || bytes < 0) return '-'
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`

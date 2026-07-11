@@ -160,12 +160,14 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { ElNotification } from 'element-plus'
 import { Download, Loading, Right, WarningFilled } from '@element-plus/icons-vue'
 import {
   describeUpdateError,
   formatBytes,
   formatEta,
   formatSpeed,
+  getUpdateCheckFailurePresentation,
   shouldShowUpdate
 } from '../utils/appUpdate.js'
 
@@ -351,6 +353,15 @@ function openFailure(error, source = 'check', phase = 'CONNECTING') {
   visible.value = true
 }
 
+function notifyStartupCheckFailure() {
+  ElNotification({
+    title: '暂时无法检查更新',
+    message: '不影响正常使用，可到系统设置中重新检查。',
+    type: 'warning',
+    duration: 5000
+  })
+}
+
 function openDownloadFailure(error) {
   technicalDetail.value = String(error?.message || error || '')
   failureSource.value = 'download'
@@ -482,8 +493,11 @@ async function checkOnStartup() {
     const result = await checkForUpdate('startup')
     if (!isCurrentCheckRequest(requestId)) return
     if (shouldShowUpdate(result)) openOffer(result)
-  } catch (error) {
-    if (isCurrentCheckRequest(requestId)) openFailure(error, 'check', 'CONNECTING')
+  } catch {
+    if (!isCurrentCheckRequest(requestId)) return
+    if (getUpdateCheckFailurePresentation('startup') === 'notification') {
+      notifyStartupCheckFailure()
+    }
   }
 }
 

@@ -5,12 +5,19 @@ import {
   formatBytes,
   formatEta,
   formatSpeed,
+  getUpdateCheckFailurePresentation,
   shouldShowUpdate
 } from '../src/utils/appUpdate.js'
 
-test('启动检查跳过状态不弹窗，手动可用状态弹窗', () => {
+test('仅可用更新状态需要展示更新对话框', () => {
+  assert.equal(shouldShowUpdate({ status: 'DEFERRED' }), false)
   assert.equal(shouldShowUpdate({ status: 'SKIPPED' }), false)
   assert.equal(shouldShowUpdate({ status: 'AVAILABLE' }), true)
+})
+
+test('启动检查失败使用通知，手动检查失败使用对话框', () => {
+  assert.equal(getUpdateCheckFailurePresentation('startup'), 'notification')
+  assert.equal(getUpdateCheckFailurePresentation('manual'), 'dialog')
 })
 
 test('格式化下载大小、速度和剩余时间', () => {
