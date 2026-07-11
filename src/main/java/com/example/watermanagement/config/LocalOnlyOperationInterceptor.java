@@ -27,7 +27,7 @@ public class LocalOnlyOperationInterceptor implements HandlerInterceptor {
 
     private boolean isSensitiveWrite(HttpServletRequest request) {
         String method = request.getMethod();
-        String path = request.getRequestURI();
+        String path = removeMatrixParameters(request.getRequestURI());
         if ("GET".equals(method) && "/api/settings/backup/download".equals(path)) return true;
         if ("POST".equals(method) && "/api/settings/backup/restore".equals(path)) return true;
         if ("POST".equals(method) && "/api/households/batch-delete".equals(path)) return true;
@@ -38,6 +38,25 @@ public class LocalOnlyOperationInterceptor implements HandlerInterceptor {
         if ("POST".equals(method) && ("/api/accounting/health/repair/preview".equals(path)
                 || "/api/accounting/health/repair/execute".equals(path))) return true;
         return "POST".equals(method) && path.startsWith("/api/accounting/adjustments/");
+    }
+
+    private String removeMatrixParameters(String path) {
+        if (path == null || path.indexOf(';') < 0) return path;
+
+        StringBuilder normalized = new StringBuilder(path.length());
+        boolean insideMatrixParameters = false;
+        for (int index = 0; index < path.length(); index++) {
+            char current = path.charAt(index);
+            if (current == ';') {
+                insideMatrixParameters = true;
+            } else if (current == '/') {
+                insideMatrixParameters = false;
+                normalized.append(current);
+            } else if (!insideMatrixParameters) {
+                normalized.append(current);
+            }
+        }
+        return normalized.toString();
     }
 
     private boolean isLoopback(String remoteAddress) {
