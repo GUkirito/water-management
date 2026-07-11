@@ -48,7 +48,7 @@ public interface WaterBillRepository extends JpaRepository<WaterBill, Long> {
     List<WaterBill> findByWaterStatus(String waterStatus);
 
     /**
-     * 查询所有未缴清水费账单，并关联活跃住户信息。
+     * 查询所有未缴清水费账单，并关联住户信息。
      */
     @Query("""
             SELECT new com.example.watermanagement.dto.PendingWaterBillRow(
@@ -61,14 +61,14 @@ public interface WaterBillRepository extends JpaRepository<WaterBill, Long> {
                 wb.waterAmount,
                 wb.waterCharge,
                 wb.actualWaterPaid,
-                wb.waterCharge - wb.actualWaterPaid,
+                wb.waterCharge - COALESCE(wb.actualWaterPaid, 0),
                 wb.waterStatus,
-                wb.note
+                wb.note,
+                h.isActive
             )
             FROM WaterBill wb
             JOIN Household h ON wb.waterMeterId = h.waterMeterId
-            WHERE h.isActive = true
-              AND wb.waterStatus IN ('未收', '部分收')
+            WHERE wb.waterStatus IN ('未收', '部分收')
               AND wb.waterCharge - COALESCE(wb.actualWaterPaid, 0) > 0
               AND (:villageName IS NULL OR h.villageName = :villageName)
               AND (:keyword IS NULL OR h.householdName LIKE CONCAT('%', :keyword, '%')

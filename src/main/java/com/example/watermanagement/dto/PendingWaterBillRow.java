@@ -24,4 +24,5 @@ public class PendingWaterBillRow {
     private BigDecimal dueAmount;
     private String waterStatus;
     private String note;
+    private Boolean householdActive;
 }

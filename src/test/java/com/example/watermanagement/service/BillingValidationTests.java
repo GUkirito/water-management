@@ -27,6 +27,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.math.BigDecimal;
@@ -90,6 +91,9 @@ class BillingValidationTests {
 
     @Autowired
     private Validator validator;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @BeforeEach
     void cleanDatabase() {
@@ -332,6 +336,74 @@ class BillingValidationTests {
         assertThat(row.getHouseholdName()).isEqualTo("张三");
         assertThat(row.getVillageName()).isEqualTo("一组");
         assertThat(row.getDueAmount()).isEqualByComparingTo(new BigDecimal("10.00"));
+        assertThat(row.getHouseholdActive()).isTrue();
+    }
+
+    @Test
+    void pendingWaterBillListIncludesInactiveHouseholdHistoricalDebt() {
+        householdRepository.save(Household.builder()
+                .householdName("已停用住户")
+                .waterMeterId("表号-STOPPED-001")
+                .villageName("一组")
+                .phone("")
+                .isActive(false)
+                .build());
+        WaterBill bill = waterBillRepository.save(WaterBill.builder()
+                .waterMeterId("表号-STOPPED-001")
+                .billYear(2026)
+                .billMonth(7)
+                .waterAmount(new BigDecimal("3.00"))
+                .waterCharge(new BigDecimal("5.40"))
+                .actualWaterPaid(new BigDecimal("1.40"))
+                .waterStatus("部分收")
+                .build());
+
+        List<PendingWaterBillRow> rows = paymentService.listPendingWaterBills(
+                null, "表号", 2026, 7);
+
+        assertThat(rows).hasSize(1);
+        PendingWaterBillRow row = rows.get(0);
+        assertThat(row.getId()).isEqualTo(bill.getId());
+        assertThat(row.getDueAmount()).isEqualByComparingTo("4.00");
+        assertThat(row.getHouseholdActive()).isFalse();
+    }
+
+    @Test
+    void pendingWaterBillListTreatsLegacyNullPaidAmountAsZero() {
+        householdRepository.save(Household.builder()
+                .householdName("旧账单住户")
+                .waterMeterId("WM-LEGACY-NULL")
+                .villageName("一组")
+                .phone("")
+                .isActive(true)
+                .build());
+        WaterBill bill = saveWaterBill("WM-LEGACY-NULL", 7, "5.40", "0.00", "未收");
+        jdbcTemplate.update("UPDATE water_bills SET actual_water_paid = NULL WHERE id = ?", bill.getId());
+
+        List<PendingWaterBillRow> rows = paymentService.listPendingWaterBills(
+                null, "WM-LEGACY-NULL", 2026, 7);
+
+        assertThat(rows).hasSize(1);
+        PendingWaterBillRow row = rows.get(0);
+        assertThat(row.getActualWaterPaid()).isNull();
+        assertThat(row.getDueAmount()).isEqualByComparingTo("5.40");
+    }
+
+    @Test
+    void pendingWaterBillListExcludesDisallowedStatusWithPositiveDueAmount() {
+        householdRepository.save(Household.builder()
+                .householdName("已收住户")
+                .waterMeterId("WM-PAID-STATUS")
+                .villageName("一组")
+                .phone("")
+                .isActive(true)
+                .build());
+        saveWaterBill("WM-PAID-STATUS", 7, "5.40", "0.00", "已收");
+
+        List<PendingWaterBillRow> rows = paymentService.listPendingWaterBills(
+                "一组", "WM-PAID-STATUS", 2026, 7);
+
+        assertThat(rows).isEmpty();
     }
 
     @Test
