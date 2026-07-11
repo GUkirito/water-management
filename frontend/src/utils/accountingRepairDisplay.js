@@ -25,7 +25,11 @@ const BILLING_ISSUES = new Set([
 ])
 
 function money(value) {
-  return `¥${Math.abs(Number(value || 0)).toFixed(2)}`
+  return `¥${Number(value ?? 0).toFixed(2)}`
+}
+
+function deductionMoney(value) {
+  return `¥${Math.abs(Number(value ?? 0)).toFixed(2)}`
 }
 
 function byId(items = []) {
@@ -33,7 +37,7 @@ function byId(items = []) {
 }
 
 function billSummary(bill = {}) {
-  return `已收 ${money(bill.actual)}，待收 ${money(bill.remainingDue)}，状态：${bill.status || '未知'}`
+  return `应收 ${money(bill.charge)}，已收 ${money(bill.actual)}，待收 ${money(bill.remainingDue)}，状态：${bill.status || '未知'}`
 }
 
 function prepaymentRows(before = {}, after = {}) {
@@ -46,7 +50,7 @@ function prepaymentRows(before = {}, after = {}) {
     const log = newLog.id == null ? oldLog : newLog
     return [{
       key: `prepayment-${id}`,
-      record: `预存抵扣记录 ${id}（${log.meter || '未知表号'}，金额 ${money(log.amount)}）`,
+      record: `预存抵扣记录 ${id}（${log.meter || '未知表号'}，抵扣金额 ${deductionMoney(log.amount)}）`,
       before: `关联水费账单 ${oldLog.billId ?? '无'}`,
       after: `关联水费账单 ${newLog.billId ?? '无'}`
     }]
@@ -88,7 +92,27 @@ export function repairNavigation(issueType) {
     return { label: '前往材料费管理核对', path: '/material-fee' }
   }
   if (issueType === 'ORPHAN_ADJUSTMENT_TARGET') {
-    return { label: '查看调账记录核对', path: '/settings#accounting-controls' }
+    return { label: '查看调账记录核对', path: '/settings', targetId: 'accounting-controls' }
   }
   return null
+}
+
+export function createLatestRequestGate() {
+  let currentRequestId = 0
+  return {
+    begin() {
+      currentRequestId += 1
+      return currentRequestId
+    },
+    isCurrent(requestId) {
+      return requestId === currentRequestId
+    },
+    invalidate() {
+      currentRequestId += 1
+    }
+  }
+}
+
+export function healthIssuesFromRepairResult(result = {}) {
+  return Array.isArray(result.remainingIssues) ? result.remainingIssues : []
 }

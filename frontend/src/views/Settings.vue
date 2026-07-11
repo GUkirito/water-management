@@ -117,7 +117,7 @@
     <el-dialog
       v-model="repairDialogVisible"
       title="账务问题处理"
-      width="760px"
+      width="min(760px, calc(100vw - 32px))"
       :close-on-click-modal="false"
       :close-on-press-escape="!executingRepair"
       :show-close="!executingRepair"
@@ -136,11 +136,13 @@
         <div v-if="repairPreview.repairable" class="wm-repair-content">
           <div class="wm-repair-section">
             <div class="wm-repair-heading">修复前后变化</div>
-            <el-table :data="repairChanges" border size="small">
-              <el-table-column prop="record" label="记录" min-width="210" />
-              <el-table-column prop="before" label="修复前" min-width="190" />
-              <el-table-column prop="after" label="修复后" min-width="190" />
-            </el-table>
+            <div class="wm-repair-table-scroll">
+              <el-table :data="repairChanges" border size="small" style="min-width:620px">
+                <el-table-column prop="record" label="记录" min-width="210" />
+                <el-table-column prop="before" label="修复前" min-width="200" />
+                <el-table-column prop="after" label="修复后" min-width="200" />
+              </el-table>
+            </div>
           </div>
 
           <div class="wm-repair-section">
@@ -195,7 +197,7 @@
       </template>
 
       <template #footer>
-        <el-button v-if="!executingRepair" @click="repairDialogVisible = false">关闭</el-button>
+        <el-button v-if="!executingRepair" @click="dismissRepairDialog">关闭</el-button>
         <el-button
           v-if="repairPreview?.repairable && !repairResult"
           type="danger"
@@ -211,7 +213,7 @@
       </template>
     </el-dialog>
 
-    <section id="accounting-controls" class="wm-panel">
+    <section id="accounting-controls" class="wm-panel" tabindex="-1">
       <div class="wm-panel-body">
         <div class="wm-section-title">月结锁定与调账</div>
         <el-form inline label-width="80px" class="wm-compact-form">
@@ -283,7 +285,7 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted } from 'vue'
+import { computed, nextTick, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { accountingApi, readingApi, settingsApi } from '@/api'
@@ -295,12 +297,15 @@ import {
 } from '@/utils/accountingHealthDisplay'
 import {
   affectedRecordText,
+  createLatestRequestGate,
+  healthIssuesFromRepairResult,
   repairChangeRows,
   repairNavigation
 } from '@/utils/accountingRepairDisplay'
 import { formatLocalMonth, formatLocalTimestamp } from '@/utils/localDate'
 
 const router = useRouter()
+const previewRequestGate = createLatestRequestGate()
 
 const waterPrice = ref(1.8)
 const threshold = ref(100)
@@ -451,6 +456,7 @@ function healthIssueKey(issue = {}) {
 
 async function openRepairPreview(issue) {
   const key = healthIssueKey(issue)
+  const requestId = previewRequestGate.begin()
   previewingIssueKey.value = key
   try {
     const preview = await accountingApi.repairPreview({
@@ -458,16 +464,20 @@ async function openRepairPreview(issue) {
       refType: issue.refType,
       refId: issue.refId
     })
+    if (!previewRequestGate.isCurrent(requestId)) return
     selectedHealthIssue.value = issue
     repairPreview.value = preview
     repairResult.value = null
     repairForm.value = { operator: '管理员', reason: '' }
     repairDialogVisible.value = true
   } catch (error) {
+    if (!previewRequestGate.isCurrent(requestId)) return
     console.warn('加载账务处理方式失败', error)
     ElMessage.error('无法查看处理方式：' + (error?.message || '请稍后重试'))
   } finally {
-    if (previewingIssueKey.value === key) previewingIssueKey.value = ''
+    if (previewRequestGate.isCurrent(requestId) && previewingIssueKey.value === key) {
+      previewingIssueKey.value = ''
+    }
   }
 }
 
@@ -482,15 +492,17 @@ async function executeRepair() {
 
   executingRepair.value = true
   try {
-    repairResult.value = await accountingApi.repairExecute({
+    const result = await accountingApi.repairExecute({
       issueType: repairPreview.value.issueType,
       refType: repairPreview.value.refType,
       refId: repairPreview.value.refId,
       operator,
       reason
     })
+    repairResult.value = result
+    healthIssues.value = healthIssuesFromRepairResult(result)
+    healthChecked.value = true
     ElMessage.success('账务修复完成，已重新检查')
-    await runHealthCheck()
   } catch (error) {
     console.warn('账务修复失败', error)
     ElMessage.error('修复失败：' + (error?.message || '数据可能已变化，请重新检查'))
@@ -500,13 +512,34 @@ async function executeRepair() {
 }
 
 function closeRepairDialog(done) {
-  if (!executingRepair.value) done()
+  if (executingRepair.value) return
+  invalidateRepairPreview()
+  done()
 }
 
-function goToRepairTarget() {
-  if (!repairNavigationTarget.value) return
+function invalidateRepairPreview() {
+  previewRequestGate.invalidate()
+  previewingIssueKey.value = ''
+}
+
+function dismissRepairDialog() {
+  if (executingRepair.value) return
+  invalidateRepairPreview()
   repairDialogVisible.value = false
-  router.push(repairNavigationTarget.value.path)
+}
+
+async function goToRepairTarget() {
+  if (!repairNavigationTarget.value) return
+  const target = repairNavigationTarget.value
+  dismissRepairDialog()
+  if (target.targetId) {
+    await nextTick()
+    const element = document.getElementById(target.targetId)
+    element?.focus({ preventScroll: true })
+    element?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    return
+  }
+  await router.push(target.path)
 }
 
 async function loadAccountingControls() {
@@ -629,6 +662,11 @@ onMounted(async () => {
   margin-bottom: 18px;
 }
 
+.wm-repair-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 .wm-repair-heading {
   margin-bottom: 8px;
   color: var(--wm-text);
@@ -658,9 +696,20 @@ onMounted(async () => {
   line-height: 1.7;
 }
 
-@media (max-width: 768px) {
-  :global(.wm-repair-dialog) {
-    width: calc(100% - 24px) !important;
-  }
+:global(.wm-repair-dialog .el-dialog__body) {
+  max-height: calc(100vh - 160px);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+:global(.wm-repair-dialog .el-dialog__footer) {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+:global(.wm-repair-dialog .el-dialog__footer .el-button + .el-button) {
+  margin-left: 0;
 }
 </style>
