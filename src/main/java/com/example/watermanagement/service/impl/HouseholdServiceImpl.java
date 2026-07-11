@@ -117,21 +117,16 @@ public class HouseholdServiceImpl implements HouseholdService {
     public void delete(Long id) {
         Household household = getById(id);
         String meterId = household.getWaterMeterId();
-        readingRepository.findByWaterMeterIdInOrderByReadingDateDesc(List.of(meterId))
-                .forEach(r -> readingRepository.delete(r));
-        waterBillRepository.findByWaterMeterId(meterId)
-                .forEach(wb -> {
-                    paymentRepository.findByBillTypeAndBillIdIn("water", List.of(wb.getId()))
-                            .forEach(p -> paymentRepository.delete(p));
-                    waterBillRepository.delete(wb);
-                });
-        prepaymentLogRepository.findByWaterMeterIdOrderByCreatedAtDesc(meterId)
-                .forEach(prepaymentLogRepository::delete);
-        materialRecordRepository.findByWaterMeterId(meterId)
-                .ifPresent(record -> {
-                    materialPaymentRepository.deleteByRecordId(record.getId());
-                    materialRecordRepository.delete(record);
-                });
+        boolean hasHistory = !readingRepository.findByWaterMeterIdInOrderByReadingDateDesc(List.of(meterId)).isEmpty()
+                || !waterBillRepository.findByWaterMeterId(meterId).isEmpty()
+                || !prepaymentLogRepository.findByWaterMeterIdOrderByCreatedAtDesc(meterId).isEmpty()
+                || materialRecordRepository.findByWaterMeterId(meterId).isPresent();
+        if (hasHistory) {
+            household.setIsActive(false);
+            householdRepository.save(household);
+            log.info("停用存在历史数据的村民: {} [水表: {}]", household.getHouseholdName(), meterId);
+            return;
+        }
         householdRepository.delete(household);
         log.info("物理删除村民: {} [水表: {}]", household.getHouseholdName(), meterId);
     }
@@ -168,7 +163,7 @@ public class HouseholdServiceImpl implements HouseholdService {
     @Transactional
     public void batchDelete(List<Long> ids) {
         for (Long id : ids) { delete(id); }
-        log.info("批量物理删除村民: {} 户", ids.size());
+        log.info("批量删除或停用村民: {} 户", ids.size());
     }
 
     @Override
@@ -176,7 +171,7 @@ public class HouseholdServiceImpl implements HouseholdService {
     public void deleteByVillage(String villageName) {
         List<Household> list = householdRepository.findByVillageNameInAndIsActiveTrue(List.of(villageName));
         for (Household h : list) { delete(h.getId()); }
-        log.info("按村物理删除: {} [{}户]", villageName, list.size());
+        log.info("按村删除或停用: {} [{}户]", villageName, list.size());
     }
 
     @Override
@@ -199,12 +194,8 @@ public class HouseholdServiceImpl implements HouseholdService {
     @Override
     public void exportToExcel(List<String> villageNames, String waterMeterId,
                                jakarta.servlet.http.HttpServletResponse response) throws java.io.IOException {
-        List<Household> households;
-        if (villageNames != null && !villageNames.isEmpty()) {
-            households = householdRepository.findByVillageNameInAndIsActiveTrue(villageNames);
-        } else {
-            households = householdRepository.findByIsActiveTrue();
-        }
+        List<Household> households = list(villageNames, waterMeterId,
+                org.springframework.data.domain.Pageable.unpaged()).getContent();
 
         List<HouseholdExportRow> rows = households.stream()
                 .map(h -> HouseholdExportRow.builder()

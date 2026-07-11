@@ -46,7 +46,7 @@
       </el-menu>
 
       <div class="wm-sidebar-version">
-        <button type="button" @click="copyVersion">v1.7.5</button>
+        <button type="button" @click="copyVersion">v1.7.6</button>
         <button type="button" title="快捷键" aria-label="快捷键" @click="showShortcutPanel = true">
           <el-icon><QuestionFilled /></el-icon>
         </button>

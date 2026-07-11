@@ -18,13 +18,13 @@ api.interceptors.response.use(
     if (code === 200) {
       return data           // 成功时直接返回 data，简化调用方代码
     } else {
-      ElMessage.error(message || '请求失败')
+      if (!response.config.silentError) ElMessage.error(message || '请求失败')
       return Promise.reject(new Error(message))
     }
   },
   error => {
     const message = error.response?.data?.message || error.message || '请检查服务器连接'
-    ElMessage.error('请求失败：' + message)
+    if (!error.config?.silentError) ElMessage.error('请求失败：' + message)
     return Promise.reject(error)
   }
 )
@@ -59,7 +59,8 @@ export const readingApi = {
   previewHistoryReadings: (formData) => api.post('/readings/history-import/preview', formData),
   importHistoryReadings: (formData) => api.post('/readings/history-import', formData),
   batchSave: (items, readingDate) => api.post('/readings/batch', items, {
-    params: { readingDate }
+    params: { readingDate },
+    silentError: true
   }),
   singleSave: (params) => api.post('/readings/single', null, { params }),
   getByDate: (params) => api.get('/readings/by-date', { params }),
@@ -94,6 +95,7 @@ export const materialRecordApi = {
   delete: (id) => api.delete(`/material-records/${id}`),
   batchDelete: (ids) => api.post('/material-records/batch-delete', { ids }),
   importExcel: (formData) => api.post('/material-records/import', formData),
+  previewImportExcel: (formData) => api.post('/material-records/import/preview', formData),
   exportExcel: (params) => api.get('/material-records/export', {
     params, responseType: 'blob'
   }),
@@ -125,7 +127,10 @@ export const accountingApi = {
 export const settingsApi = {
   getInfo: () => api.get('/settings/info'),
   downloadBackup: () => api.get('/settings/backup/download', { responseType: 'blob' }),
-  restoreBackup: (formData) => api.post('/settings/backup/restore', formData)
+  restoreBackup: (formData, desktopMode = false) => api.post('/settings/backup/restore', formData, {
+    params: { desktopMode },
+    silentError: true
+  })
 }
 
 export default api

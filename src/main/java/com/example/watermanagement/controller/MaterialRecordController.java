@@ -85,6 +85,12 @@ public class MaterialRecordController {
                 file.getInputStream(), "导入"));
     }
 
+    @PostMapping("/import/preview")
+    public ApiResponse<Map<String, Object>> previewImportExcel(
+            @RequestParam("file") MultipartFile file) throws IOException {
+        return ApiResponse.ok(recordService.previewImportFromExcel(file.getInputStream()));
+    }
+
     @GetMapping("/export")
     public void exportExcel(
             @RequestParam(required = false) String villageName,

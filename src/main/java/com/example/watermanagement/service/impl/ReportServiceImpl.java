@@ -127,10 +127,10 @@ public class ReportServiceImpl implements ReportService {
     }
 
     private List<Household> getHouseholds(List<String> villageNames) {
-        if (villageNames != null && !villageNames.isEmpty()) {
-            return householdRepository.findByVillageNameInAndIsActiveTrue(villageNames);
-        }
-        return householdRepository.findByIsActiveTrue();
+        return householdRepository.findAll().stream()
+                .filter(household -> villageNames == null || villageNames.isEmpty()
+                        || villageNames.contains(household.getVillageName()))
+                .toList();
     }
 
     private VillageCollectionSummaryRow buildVillageSummary(String villageName,
@@ -166,7 +166,7 @@ public class ReportServiceImpl implements ReportService {
         BigDecimal unpaidAmount = waterCharge.subtract(actualWaterPaid).max(BigDecimal.ZERO);
         BigDecimal collectionRate = waterCharge.compareTo(BigDecimal.ZERO) > 0
                 ? actualWaterPaid.multiply(new BigDecimal("100")).divide(waterCharge, 2, RoundingMode.HALF_UP)
-                : new BigDecimal("100.00");
+                : null;
 
         return VillageCollectionSummaryRow.builder()
                 .villageName(villageName)

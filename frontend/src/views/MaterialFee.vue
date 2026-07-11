@@ -122,7 +122,7 @@
       </template>
     </el-drawer>
 
-    <el-dialog v-model="importResultVisible" title="导入结果" width="600px" :close-on-click-modal="false">
+    <el-dialog v-model="importResultVisible" :title="pendingMaterialImport ? '材料费导入预览' : '导入结果'" width="680px" :close-on-click-modal="false">
       <div class="mb-4">
         <div class="flex gap-4 text-sm">
           <span>共处理 <strong>{{ importResult.total }}</strong> 条</span>
@@ -142,6 +142,7 @@
         <el-table-column label="结果" width="100">
           <template #default="{ row }">
             <el-tag v-if="row.status === 'success'" type="success" size="small">成功</el-tag>
+            <el-tag v-else-if="row.status === 'ready'" type="warning" size="small">待导入</el-tag>
             <el-tag v-else-if="row.status === 'skip'" type="info" size="small">跳过</el-tag>
             <el-tag v-else type="danger" size="small">失败</el-tag>
           </template>
@@ -150,6 +151,7 @@
       </el-table>
       <template #footer>
         <el-button @click="importResultVisible = false">关闭</el-button>
+        <el-button v-if="pendingMaterialImport" type="primary" :disabled="importResult.fail > 0" @click="confirmMaterialImport">确认导入</el-button>
       </template>
     </el-dialog>
 
@@ -182,6 +184,7 @@ import { ref, onBeforeUnmount, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { householdApi, materialRecordApi } from '@/api'
+import { formatLocalDate, formatLocalTimestamp } from '@/utils/localDate'
 
 const selectedVillage = ref('')
 const filterStatus = ref('')
@@ -203,6 +206,7 @@ const savingForm = ref(false)
 const form = ref({ id: null, householdName: '', waterMeterId: '', phone: '', villageName: '', totalFee: 1500, note: '' })
 
 const importResultVisible = ref(false)
+const pendingMaterialImport = ref(null)
 const importResult = ref({
   total: 0,
   success: 0,
@@ -213,7 +217,7 @@ const importResult = ref({
 
 const collectVisible = ref(false)
 const collecting = ref(false)
-const collectForm = ref({ recordId: null, householdName: '', waterMeterId: '', totalFee: 0, actualPaid: 0, unpaid: 0, amount: null, paidDate: new Date().toISOString().slice(0, 10), collector: '管理员', note: '' })
+const collectForm = ref({ recordId: null, householdName: '', waterMeterId: '', totalFee: 0, actualPaid: 0, unpaid: 0, amount: null, paidDate: formatLocalDate(), collector: '管理员', note: '' })
 
 function unpaid(row) { return Number((row.totalFee || 0) - (row.actualPaid || 0)) }
 function statusType(s) { return s === '已收' ? 'success' : s === '部分收' ? 'warning' : 'danger' }
@@ -366,21 +370,34 @@ async function importExcelFile(file) {
   const fd = new FormData()
   fd.append('file', file)
   try {
-    const r = await materialRecordApi.importExcel(fd)
+    const r = await materialRecordApi.previewImportExcel(fd)
     importResult.value = normalizeImportResult(r || {})
+    pendingMaterialImport.value = file
     importResultVisible.value = true
-    ElNotification({
-      title: '导入完成',
-      message: `成功导入 ${importResult.value.success} 条，失败 ${importResult.value.fail} 条，已跳过 ${importResult.value.skip} 条`,
-      type: 'success',
-      duration: 5000
-    })
-    await loadData()
-    await loadVillages()
   } catch (error) {
     console.warn('材料费导入失败', error)
   }
   return false
+}
+
+async function confirmMaterialImport() {
+  if (!pendingMaterialImport.value || importResult.value.fail > 0) return
+  const fd = new FormData()
+  fd.append('file', pendingMaterialImport.value)
+  try {
+    const result = await materialRecordApi.importExcel(fd)
+    importResult.value = normalizeImportResult(result || {})
+    pendingMaterialImport.value = null
+    ElNotification({
+      title: '导入完成',
+      message: `成功导入 ${importResult.value.success} 条，失败 ${importResult.value.fail} 条，已跳过 ${importResult.value.skip} 条`,
+      type: importResult.value.fail ? 'warning' : 'success',
+      duration: 5000
+    })
+    await Promise.all([loadData(), loadVillages()])
+  } catch (error) {
+    console.warn('确认材料费导入失败', error)
+  }
 }
 
 function normalizeImportResult(result) {
@@ -425,7 +442,7 @@ async function exportExcel() {
     const blob = await materialRecordApi.exportExcel(p)
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = `材料费统计_${new Date().toISOString().slice(0, 10)}.xlsx`
+    a.download = `材料费统计_${formatLocalTimestamp()}.xlsx`
     a.click()
     URL.revokeObjectURL(a.href)
     ElMessage.success('导出成功')
@@ -443,7 +460,7 @@ function openCollectDialog(row) {
     actualPaid: row.actualPaid,
     unpaid: unpaid(row),
     amount: unpaid(row) > 0 ? unpaid(row) : null,
-    paidDate: new Date().toISOString().slice(0, 10),
+    paidDate: formatLocalDate(),
     collector: '管理员',
     note: ''
   }
@@ -502,7 +519,7 @@ async function handleBatchCollect() {
   }
 
   let successCount = 0
-  const paidDate = new Date().toISOString().slice(0, 10)
+  const paidDate = formatLocalDate()
   for (const row of rows) {
     try {
       await materialRecordApi.collect(row.id, {

@@ -1,0 +1,1 @@
+const e=t=>String(t).padStart(2,"0");function n(t=new Date){return`${t.getFullYear()}-${e(t.getMonth()+1)}-${e(t.getDate())}`}function o(t=new Date){return n(t).slice(0,7)}function a(t=new Date){return`${t.getFullYear()}${e(t.getMonth()+1)}${e(t.getDate())}_${e(t.getHours())}${e(t.getMinutes())}${e(t.getSeconds())}`}export{a,o as b,n as f};

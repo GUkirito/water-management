@@ -38,18 +38,14 @@
         <div class="wm-rate-overview-content">
           <div class="wm-rate-group">
             <div>
-              <div class="wm-stat-label">水费收缴率</div>
-              <div class="wm-stat-value wm-stat-value--compact" :class="waterRateColor">{{ waterRate }}%</div>
+              <div class="wm-stat-label">水费收缴率（本月）</div>
+              <div class="wm-stat-value wm-stat-value--compact" :class="waterRateColor">{{ waterRate == null ? '无账单' : `${waterRate}%` }}</div>
             </div>
             <div class="wm-rate-divider">|</div>
             <div>
-              <div class="wm-stat-label">材料费收缴率</div>
+              <div class="wm-stat-label">材料费收缴率（全部记录）</div>
               <div class="wm-stat-value wm-stat-value--compact" :class="materialRateColor">{{ materialRateText }}</div>
             </div>
-          </div>
-          <div class="wm-rate-total">
-            <div class="wm-stat-label">综合收缴率</div>
-            <div class="wm-stat-value wm-stat-value--large" :class="overallRateColor">{{ overallCollectionRate }}%</div>
           </div>
         </div>
       </section>
@@ -153,6 +149,7 @@
 <script setup>
 import { reactive, ref, onBeforeUnmount, onMounted, computed } from 'vue'
 import { householdApi, reportApi, readingApi, materialRecordApi } from '@/api'
+import { calculateCollectionRate } from '@/utils/collectionRate'
 
 const statsLoading = ref(true)
 const currentMonthLabel = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' })
@@ -161,7 +158,7 @@ const stats = reactive({
   monthlyUsage: '0.00',
   monthlyCharge: '0.00',
   monthlyPaid: '0.00',
-  collectionRate: '0.0'
+  collectionRate: null
 })
 const matStats = reactive({
   totalFee: '0.00',
@@ -174,19 +171,13 @@ const allLoadFailed = ref(false)
 
 const waterRate = computed(() => stats.collectionRate)
 const materialRate = computed(() => matStats.collectionRate)
-const materialRateText = computed(() => materialRate.value == null ? '-' : `${materialRate.value}%`)
-const overallCollectionRate = computed(() => {
-  const totalCharge = Number(stats.monthlyCharge || 0) + Number(matStats.totalFee || 0)
-  const totalPaid = Number(stats.monthlyPaid || 0) + Number(matStats.totalPaid || 0)
-  return totalCharge > 0 ? ((totalPaid / totalCharge) * 100).toFixed(1) : '0.0'
-})
+const materialRateText = computed(() => materialRate.value == null ? '无账单' : `${materialRate.value}%`)
 const rateColor = (rate) => {
   if (rate >= 90) return 'text-emerald-600'
   if (rate >= 60) return 'text-amber-500'
   return 'text-red-500'
 }
-const overallRateColor = computed(() => rateColor(Number(overallCollectionRate.value)))
-const waterRateColor = computed(() => rateColor(Number(stats.collectionRate)))
+const waterRateColor = computed(() => stats.collectionRate == null ? '' : rateColor(Number(stats.collectionRate)))
 const materialRateColor = computed(() => matStats.collectionRate == null ? '' : rateColor(Number(matStats.collectionRate)))
 
 async function loadDashboard() {
@@ -216,7 +207,7 @@ async function loadDashboard() {
         stats.monthlyUsage = usage.toFixed(2)
         stats.monthlyCharge = charge.toFixed(2)
         stats.monthlyPaid = paid.toFixed(2)
-        stats.collectionRate = charge > 0 ? ((paid / charge) * 100).toFixed(1) : '0.0'
+        stats.collectionRate = calculateCollectionRate(charge, paid)
       }
     } catch (error) {
       failedCount++
@@ -234,7 +225,7 @@ async function loadDashboard() {
       })
       matStats.totalFee = totalFee.toFixed(2)
       matStats.totalPaid = totalPaid.toFixed(2)
-      matStats.collectionRate = totalFee > 0 ? ((totalPaid / totalFee) * 100).toFixed(1) : null
+      matStats.collectionRate = calculateCollectionRate(totalFee, totalPaid)
     } catch (error) {
       failedCount++
       console.warn('加载材料费统计失败', error)

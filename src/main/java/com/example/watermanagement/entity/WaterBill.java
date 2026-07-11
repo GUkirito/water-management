@@ -46,6 +46,10 @@ public class WaterBill {
     @Column(name = "water_amount", precision = 10, scale = 2)
     private BigDecimal waterAmount;
 
+    /** 生成或允许更新该账单时实际使用的水价 */
+    @Column(name = "water_price", precision = 10, scale = 2)
+    private BigDecimal waterPrice;
+
     /** 应收水费 = 用水量 × 1.8 元/吨 */
     @Column(name = "water_charge", precision = 10, scale = 2)
     private BigDecimal waterCharge;

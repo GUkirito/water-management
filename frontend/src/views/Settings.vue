@@ -68,18 +68,22 @@
       </div>
     </section>
 
+    <el-alert v-if="lanAccessEnabled" title="局域网访问已开启" type="warning"
+      description="当前后端监听非回环地址。备份恢复、批量删除、解锁和调账仍只允许在本机执行。"
+      show-icon :closable="false" style="margin-bottom:16px" />
+
     <section class="wm-panel">
       <div class="wm-panel-body">
         <div class="wm-section-title">账务健康检查</div>
         <div class="wm-table-actions" style="margin-bottom:12px">
           <el-button type="primary" @click="runHealthCheck" :loading="checkingHealth">开始检查</el-button>
-          <span class="wm-muted" style="font-size:12px">检查重复账单、超收、负用水量、孤儿预存流水和孤儿缴费记录。</span>
+          <span class="wm-muted" style="font-size:12px">检查重复账单、超收、负数用水量，以及找不到对应住户或账单的记录。</span>
         </div>
         <el-empty v-if="healthChecked && !healthIssues.length" description="暂无账务异常" :image-size="60" class="wm-empty" />
         <el-table v-if="healthIssues.length" :data="healthIssues" border stripe size="small" max-height="320">
           <el-table-column label="严重程度" width="90">
             <template #default="{ row }">
-              <el-tag :type="row.severity === 'ERROR' ? 'danger' : 'warning'" size="small">{{ row.severity }}</el-tag>
+              <el-tag :type="row.severity === 'ERROR' ? 'danger' : 'warning'" size="small">{{ healthSeverityLabel(row.severity) }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column label="问题类型" min-width="170">
@@ -89,9 +93,11 @@
             <template #default="{ row }">{{ row.waterMeterId || '-' }}</template>
           </el-table-column>
           <el-table-column label="关联对象" width="140">
-            <template #default="{ row }">{{ row.refType }} #{{ row.refId }}</template>
+            <template #default="{ row }">{{ healthReferenceLabel(row.refType, row.refId) }}</template>
           </el-table-column>
-          <el-table-column prop="message" label="说明" min-width="220" show-overflow-tooltip />
+          <el-table-column label="说明" min-width="320" show-overflow-tooltip>
+            <template #default="{ row }">{{ healthMessage(row) }}</template>
+          </el-table-column>
         </el-table>
       </div>
     </section>
@@ -171,6 +177,13 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { accountingApi, readingApi, settingsApi } from '@/api'
+import {
+  healthMessage,
+  healthReferenceLabel,
+  healthSeverityLabel,
+  healthTypeLabel
+} from '@/utils/accountingHealthDisplay'
+import { formatLocalMonth, formatLocalTimestamp } from '@/utils/localDate'
 
 const waterPrice = ref(1.8)
 const threshold = ref(100)
@@ -182,7 +195,8 @@ const checkingHealth = ref(false)
 const healthChecked = ref(false)
 const healthIssues = ref([])
 const dbFilePath = ref('加载中...')
-const monthLockValue = ref(new Date().toISOString().slice(0, 7))
+const lanAccessEnabled = ref(false)
+const monthLockValue = ref(formatLocalMonth())
 const monthLockOperator = ref('管理员')
 const monthLockNote = ref('')
 const monthLocks = ref([])
@@ -220,7 +234,7 @@ async function downloadBackup() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = 'backup_' + new Date().toISOString().slice(0, 10) + '_water_meter.db'
+    a.download = 'backup_' + formatLocalTimestamp() + '_water_meter.db'
     a.click()
     URL.revokeObjectURL(url)
     ElMessage.success('备份下载成功')
@@ -248,11 +262,23 @@ async function restoreBackup(uploadFile) {
   try {
     const formData = new FormData()
     formData.append('file', uploadFile.raw)
-    const result = await settingsApi.restoreBackup(formData)
-    ElMessage.success(`恢复成功，请重启应用。回滚备份：${result.rollbackFilePath || '-'}`)
-    dbFilePath.value = result.dbFilePath || dbFilePath.value
+    const staged = await settingsApi.restoreBackup(formData, isTauriEnv)
+    if (!isTauriEnv) {
+      ElMessage.warning(staged.message)
+      return
+    }
+    const invoke = window.__TAURI__?.core?.invoke || window.__TAURI__?.invoke
+    const result = await invoke('restore_database', { token: staged.token })
+    const targetUrl = `http://127.0.0.1:${result.port}/settings`
+    if (result.status === 'COMPLETED') {
+      ElMessage.success(result.message)
+    } else {
+      ElMessage.warning(result.message)
+    }
+    window.location.replace(targetUrl)
   } catch (error) {
     console.warn('恢复备份失败', error)
+    ElMessage.error('恢复备份失败：' + (error?.message || error))
   } finally {
     restoring.value = false
   }
@@ -289,17 +315,6 @@ async function runHealthCheck() {
   }
 }
 
-function healthTypeLabel(type) {
-  return {
-    DUPLICATE_WATER_BILL: '重复水费账单',
-    WATER_BILL_OVERPAID: '水费实收大于应收',
-    NEGATIVE_READING_USAGE: '负用水量',
-    ORPHAN_PREPAYMENT_LOG: '孤儿预存流水',
-    ORPHAN_WATER_PAYMENT: '孤儿水费缴费记录',
-    ORPHAN_MATERIAL_PAYMENT: '孤儿材料费缴费记录'
-  }[type] || type
-}
-
 async function loadAccountingControls() {
   monthLocks.value = await accountingApi.listMonthLocks() || []
   adjustments.value = await accountingApi.listAdjustments() || []
@@ -329,18 +344,20 @@ async function lockSelectedMonth() {
 }
 
 async function unlockMonth(row) {
+  let reason
   try {
-    await ElMessageBox.confirm(
-      `解除 ${row.billYear}-${String(row.billMonth).padStart(2, '0')} 月结锁定后，可重新修改该月抄表记录。是否继续？`,
+    const result = await ElMessageBox.prompt(
+      `解除 ${row.billYear}-${String(row.billMonth).padStart(2, '0')} 月结锁定后，可重新修改该月数据。请输入解锁原因。`,
       '确认解锁',
-      { type: 'warning', confirmButtonText: '解除锁定', cancelButtonText: '取消' }
+      { type: 'warning', confirmButtonText: '解除锁定', cancelButtonText: '取消', inputValidator: value => !!value?.trim() || '必须填写解锁原因' }
     )
+    reason = result.value.trim()
   } catch (error) {
     console.warn('取消解除月结锁定:', error)
     return
   }
   try {
-    await accountingApi.unlockMonth({ billYear: row.billYear, billMonth: row.billMonth })
+    await accountingApi.unlockMonth({ billYear: row.billYear, billMonth: row.billMonth, operator: monthLockOperator.value, reason })
     ElMessage.success('已解除月结锁定')
     await loadAccountingControls()
   } catch (error) {
@@ -386,6 +403,7 @@ onMounted(async () => {
   try {
     const info = await settingsApi.getInfo()
     dbFilePath.value = info.dbFilePath || '未知'
+    lanAccessEnabled.value = info.lanAccessEnabled === 'true'
   } catch (error) {
     console.warn('加载系统信息失败', error)
     dbFilePath.value = '未知'

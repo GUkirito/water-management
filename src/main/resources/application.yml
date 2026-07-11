@@ -4,7 +4,7 @@
 
 server:
   port: 8080                          # 程序启动后访问地址：http://localhost:8080
-  address: 0.0.0.0                    # 允许局域网内其他电脑访问
+  address: ${WATER_SERVER_ADDRESS:127.0.0.1} # 默认仅本机；显式配置 0.0.0.0 才开启局域网
 
 spring:
   servlet:

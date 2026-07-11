@@ -121,7 +121,12 @@ public class MaterialRecordServiceImpl implements MaterialRecordService {
     @Transactional
     public void delete(Long id) {
         MaterialRecord record = getById(id);
-        paymentRepository.deleteByRecordId(id);
+        if (!paymentRepository.findByRecordIdOrderByPaidDateDesc(id).isEmpty()) {
+            throw new BusinessException("该材料费记录已有缴费流水，不能删除");
+        }
+        if (adjustmentRepository.existsByTargetTypeAndTargetId("MATERIAL_RECORD", id)) {
+            throw new BusinessException("该材料费记录已有调账流水，不能删除");
+        }
         recordRepository.delete(record);
         log.info("删除材料费记录: id={}", id);
     }
@@ -130,8 +135,7 @@ public class MaterialRecordServiceImpl implements MaterialRecordService {
     @Transactional
     public void batchDelete(List<Long> ids) {
         for (Long id : ids) {
-            paymentRepository.deleteByRecordId(id);
-            recordRepository.deleteById(id);
+            delete(id);
         }
         log.info("批量删除材料费记录: {} 条", ids.size());
     }
@@ -139,8 +143,18 @@ public class MaterialRecordServiceImpl implements MaterialRecordService {
     @Override
     @Transactional
     public Map<String, Object> importFromExcel(InputStream inputStream, String defaultCollector) {
+        return processImport(inputStream, defaultCollector, true);
+    }
+
+    @Override
+    public Map<String, Object> previewImportFromExcel(InputStream inputStream) {
+        return processImport(inputStream, "导入", false);
+    }
+
+    private Map<String, Object> processImport(InputStream inputStream, String defaultCollector, boolean write) {
         int totalRows = 0, inserted = 0, skipped = 0;
         List<String> errors = new ArrayList<>();
+        List<Map<String, Object>> details = new ArrayList<>();
 
         try {
             byte[] fileBytes = inputStream.readAllBytes();
@@ -192,17 +206,37 @@ public class MaterialRecordServiceImpl implements MaterialRecordService {
                     String remark = cellStr(rowMap, 5);
 
                     if (waterMeterId == null || waterMeterId.isBlank()) {
-                        errors.add("第" + (i + 1) + "行：表号为空");
+                        String message = "第" + (i + 1) + "行：表号为空";
+                        errors.add(message);
+                        details.add(importDetail(householdName, null, null, "fail", message, false));
                         continue;
                     }
 
                     if (recordRepository.existsByWaterMeterId(waterMeterId.trim())) {
                         skipped++;
-                        errors.add("跳过：第" + (i + 1) + "行 表号 " + waterMeterId.trim() + " 已存在");
+                        String message = "跳过：第" + (i + 1) + "行 表号 " + waterMeterId.trim() + " 已存在";
+                        errors.add(message);
+                        details.add(importDetail(householdName, waterMeterId, null, "skip", message, false));
                         continue;
                     }
 
-                    BigDecimal totalFee = parseFeeStr(feeStr);
+                    boolean usedDefault = feeStr == null || feeStr.isBlank();
+                    BigDecimal totalFee;
+                    try {
+                        totalFee = parseFeeStr(feeStr);
+                    } catch (NumberFormatException e) {
+                        String message = "第" + (i + 1) + "行：材料费金额无法解析: " + feeStr;
+                        errors.add(message);
+                        details.add(importDetail(householdName, waterMeterId, null, "fail", message, false));
+                        continue;
+                    }
+                    String readyMessage = usedDefault ? "金额为空，使用默认值 1500.00" : "金额解析成功";
+                    if (!write) {
+                        inserted++;
+                        details.add(importDetail(householdName, waterMeterId, totalFee,
+                                "ready", readyMessage, usedDefault));
+                        continue;
+                    }
                     MaterialRecord record = MaterialRecord.builder()
                             .householdName(householdName != null ? householdName.trim() : "未知")
                             .waterMeterId(waterMeterId.trim())
@@ -234,6 +268,8 @@ public class MaterialRecordServiceImpl implements MaterialRecordService {
                     }
 
                     inserted++;
+                    details.add(importDetail(householdName, waterMeterId, totalFee,
+                            "success", usedDefault ? readyMessage + "，导入成功" : "导入成功", usedDefault));
                 }
             }
         } catch (IOException e) {
@@ -247,7 +283,10 @@ public class MaterialRecordServiceImpl implements MaterialRecordService {
         result.put("total", totalRows);
         result.put("inserted", inserted);
         result.put("skipped", skipped);
+        result.put("success", inserted);
+        result.put("fail", Math.max(0, errors.size() - skipped));
         result.put("errors", errors);
+        result.put("details", details);
         return result;
     }
 
@@ -365,11 +404,21 @@ public class MaterialRecordServiceImpl implements MaterialRecordService {
     }
 
     private BigDecimal parseFeeStr(String feeStr) {
-        try {
-            return feeStr != null && !feeStr.isBlank()
-                    ? new BigDecimal(feeStr) : new BigDecimal("1500.00");
-        } catch (NumberFormatException e) {
-            return new BigDecimal("1500.00");
-        }
+        return feeStr != null && !feeStr.isBlank()
+                ? new BigDecimal(feeStr).setScale(2, java.math.RoundingMode.HALF_UP)
+                : new BigDecimal("1500.00");
+    }
+
+    private Map<String, Object> importDetail(String householdName, String waterMeterId,
+                                              BigDecimal totalFee, String status,
+                                              String message, boolean usedDefault) {
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("householdName", householdName == null ? "未知" : householdName.trim());
+        detail.put("waterMeterId", waterMeterId == null ? "-" : waterMeterId.trim());
+        detail.put("totalFee", totalFee);
+        detail.put("status", status);
+        detail.put("message", message);
+        detail.put("usedDefault", usedDefault);
+        return detail;
     }
 }

@@ -17,6 +17,8 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
      */
     List<Payment> findByBillTypeAndBillId(String billType, Long billId);
 
+    boolean existsByBillTypeAndBillId(String billType, Long billId);
+
     /**
      * 按账单类型 + 多个账单 ID 查找缴费记录（合并缴费时使用）
      */

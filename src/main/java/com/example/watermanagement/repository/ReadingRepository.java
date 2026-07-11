@@ -19,6 +19,8 @@ public interface ReadingRepository extends JpaRepository<Reading, Long> {
      */
     Optional<Reading> findByWaterMeterIdAndReadingDate(String waterMeterId, LocalDate readingDate);
 
+    boolean existsByWaterMeterIdAndReadingDateAfter(String waterMeterId, LocalDate readingDate);
+
     /**
      * 查询某水表在指定日期范围内的所有抄表记录
      */

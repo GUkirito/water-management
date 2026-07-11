@@ -226,6 +226,7 @@
 import { ref, reactive, computed, nextTick, onBeforeUnmount, onMounted } from 'vue'
 import { ElMessage, ElNotification } from 'element-plus'
 import { householdApi, paymentApi } from '@/api'
+import { formatLocalDate } from '@/utils/localDate'
 
 const households = ref([])
 const allVillages = ref([])
@@ -375,7 +376,7 @@ async function doPay() {
       billType: 'water',
       billIds: selectedBills.value.map(b => b.id),
       amount: payAmount.value,
-      paidDate: new Date().toISOString().slice(0, 10),
+      paidDate: formatLocalDate(),
       paymentMethod: payMethod.value,
       operator: '管理员'
     })

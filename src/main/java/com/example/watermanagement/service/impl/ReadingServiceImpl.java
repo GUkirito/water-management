@@ -7,16 +7,16 @@ import com.example.watermanagement.dto.HistoricalReadingImportRow;
 import com.example.watermanagement.dto.ReadingImportDetail;
 import com.example.watermanagement.dto.ReadingRowDTO;
 import com.example.watermanagement.entity.Household;
-import com.example.watermanagement.entity.PrepaymentLog;
 import com.example.watermanagement.entity.Reading;
 import com.example.watermanagement.entity.WaterBill;
 import com.example.watermanagement.exception.BusinessException;
 import com.example.watermanagement.repository.HouseholdRepository;
 import com.example.watermanagement.repository.MonthLockRepository;
-import com.example.watermanagement.repository.PrepaymentLogRepository;
 import com.example.watermanagement.repository.ReadingRepository;
 import com.example.watermanagement.repository.WaterBillRepository;
 import com.example.watermanagement.service.ReadingService;
+import com.example.watermanagement.service.ReadingWriteService;
+import com.example.watermanagement.service.AccountingWriteGuard;
 import com.example.watermanagement.util.ExcelUtil;
 import jakarta.annotation.PostConstruct;
 import jakarta.persistence.EntityManager;
@@ -54,9 +54,10 @@ public class ReadingServiceImpl implements ReadingService {
     private final HouseholdRepository householdRepository;
     private final ReadingRepository readingRepository;
     private final WaterBillRepository waterBillRepository;
-    private final PrepaymentLogRepository prepaymentLogRepository;
     private final MonthLockRepository monthLockRepository;
     private final EntityManager entityManager;
+    private final ReadingWriteService readingWriteService;
+    private final AccountingWriteGuard accountingWriteGuard;
 
     /** 水价：元/吨，默认 1.8 */
     @Value("${water.price:1.8}")
@@ -204,30 +205,32 @@ public class ReadingServiceImpl implements ReadingService {
     @Transactional
     public Map<String, Object> importReadings(InputStream inputStream, LocalDate readingDate) {
         List<ReadingExportRow> rows = ExcelUtil.read(inputStream, ReadingExportRow.class);
-
         List<ReadingImportDetail> details = new ArrayList<>();
-
+        Set<String> seenMeters = new HashSet<>();
         for (int i = 0; i < rows.size(); i++) {
             ReadingExportRow row = rows.get(i);
             ReadingImportDetail detail = previewStandardReading(row, i + 1, readingDate);
-            if (isWritable(detail)) {
-                try {
-                Reading reading = processSingleReading(
-                        row.getWaterMeterId(), row.getCurrentReading(), readingDate, null, null);
-                    detail.setStatus(Boolean.TRUE.equals(reading.getIsAbnormal()) ? "abnormal" : "success");
-                    detail.setMessage(Boolean.TRUE.equals(reading.getIsAbnormal())
-                            ? "导入成功，已标记异常：" + reading.getAbnormalReason()
-                            : "导入成功");
-                if (Boolean.TRUE.equals(reading.getIsAbnormal())) {
-                        detail.setStatus("abnormal");
-                }
-            } catch (Exception e) {
-                    detail.setStatus("fail");
-                    detail.setMessage(e.getMessage());
-                log.warn("导入抄表数据失败: waterMeterId={}, {}", row.getWaterMeterId(), e.getMessage());
-            }
+            if (isWritable(detail) && !seenMeters.add(row.getWaterMeterId())) {
+                fail(detail, "导入文件中同一水表存在重复行");
             }
             details.add(detail);
+        }
+
+        if (details.stream().anyMatch(detail -> "fail".equals(detail.getStatus()))) {
+            return buildImportResult(details);
+        }
+
+        for (int i = 0; i < rows.size(); i++) {
+            ReadingImportDetail detail = details.get(i);
+            if (!isWritable(detail)) continue;
+            ReadingExportRow row = rows.get(i);
+            Reading reading = readingWriteService.saveImportedRow(
+                    row.getWaterMeterId(), row.getCurrentReading(), readingDate,
+                    null, null, waterPrice, abnormalThreshold);
+            detail.setStatus(Boolean.TRUE.equals(reading.getIsAbnormal()) ? "abnormal" : "success");
+            detail.setMessage(Boolean.TRUE.equals(reading.getIsAbnormal())
+                    ? "导入成功，已标记异常：" + reading.getAbnormalReason()
+                    : "导入成功");
         }
 
         Map<String, Object> result = buildImportResult(details);
@@ -246,28 +249,51 @@ public class ReadingServiceImpl implements ReadingService {
     @Transactional
     public Map<String, Object> importHistoricalReadings(InputStream inputStream) {
         List<HistoricalReadingImportRow> rows = ExcelUtil.read(inputStream, HistoricalReadingImportRow.class);
-        return buildImportResult(previewHistoricalRows(rows, true));
+        List<ReadingImportDetail> details = previewHistoricalRows(rows, false);
+        if (details.stream().anyMatch(detail -> "fail".equals(detail.getStatus()))) {
+            return buildImportResult(details);
+        }
+        for (ReadingImportDetail detail : details) {
+            if (!isWritable(detail)) continue;
+            readingRepository.save(Reading.builder()
+                    .waterMeterId(detail.getWaterMeterId())
+                    .readingDate(detail.getReadingDate())
+                    .currentReading(detail.getCurrentReading())
+                    .previousReading(detail.getPreviousReading())
+                    .usageAmount(detail.getUsageAmount())
+                    .isAbnormal("abnormal".equals(detail.getStatus()))
+                    .abnormalReason("abnormal".equals(detail.getStatus()) ? detail.getMessage() : null)
+                    .note("历史导入")
+                    .build());
+            detail.setMessage("历史表底导入成功");
+        }
+        entityManager.flush();
+        return buildImportResult(details);
     }
 
     // ==================== 批量保存 ====================
 
     @Override
-    @Transactional
     public Map<String, Object> batchSave(List<ReadingBatchItem> items, LocalDate readingDate) {
         int total = 0, abnormal = 0;
         List<String> errors = new ArrayList<>();
+        List<Map<String, Object>> details = new ArrayList<>();
 
         for (ReadingBatchItem item : items) {
             try {
-                Reading reading = processSingleReading(
+                Reading reading = readingWriteService.saveRow(
                         item.getWaterMeterId(), item.getCurrentReading(),
-                        readingDate, item.getChargeableUsage(), item.getNote());
+                        readingDate, item.getChargeableUsage(), item.getNote(), waterPrice, abnormalThreshold);
                 total++;
+                String status = Boolean.TRUE.equals(reading.getIsAbnormal()) ? "abnormal" : "success";
                 if (Boolean.TRUE.equals(reading.getIsAbnormal())) {
                     abnormal++;
                 }
+                details.add(batchDetail(item.getWaterMeterId(), status,
+                        Boolean.TRUE.equals(reading.getIsAbnormal()) ? reading.getAbnormalReason() : "保存成功"));
             } catch (Exception e) {
                 errors.add(item.getWaterMeterId() + ": " + e.getMessage());
+                details.add(batchDetail(item.getWaterMeterId(), "fail", e.getMessage()));
             }
         }
 
@@ -275,16 +301,28 @@ public class ReadingServiceImpl implements ReadingService {
         Map<String, Object> result = new HashMap<>();
         result.put("total", total);
         result.put("abnormal", abnormal);
+        result.put("fail", errors.size());
         result.put("errors", errors);
+        result.put("details", details);
         return result;
     }
 
     // ==================== 单个录入 ====================
 
     @Override
-    @Transactional
     public Reading singleSave(String waterMeterId, BigDecimal currentReading, LocalDate readingDate) {
-        return processSingleReading(waterMeterId, currentReading, readingDate, null, null);
+        return readingWriteService.saveRow(waterMeterId, currentReading, readingDate,
+                null, null, waterPrice, abnormalThreshold);
+    }
+
+    private Map<String, Object> batchDetail(String waterMeterId, String status, String message) {
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("waterMeterId", waterMeterId);
+        householdRepository.findByWaterMeterId(waterMeterId)
+                .ifPresent(household -> detail.put("householdName", household.getHouseholdName()));
+        detail.put("status", status);
+        detail.put("message", message);
+        return detail;
     }
 
     // ==================== 查询 ====================
@@ -421,6 +459,16 @@ public class ReadingServiceImpl implements ReadingService {
         }
         detail.setHouseholdName(household.get().getHouseholdName());
         detail.setVillageName(household.get().getVillageName());
+        try {
+            accountingWriteGuard.requireNoLaterReading(row.getWaterMeterId(), readingDate);
+            Reading sameMonth = accountingWriteGuard.findReadingInMonth(row.getWaterMeterId(), readingDate)
+                    .orElse(null);
+            if (sameMonth != null && !sameMonth.getReadingDate().equals(readingDate)) {
+                return fail(detail, "同月已有抄表记录: " + sameMonth.getReadingDate());
+            }
+        } catch (BusinessException e) {
+            return fail(detail, e.getMessage());
+        }
 
         BigDecimal previous = getLastReadingBefore(row.getWaterMeterId(), readingDate);
         BigDecimal usage = row.getCurrentReading().subtract(previous);
@@ -450,10 +498,17 @@ public class ReadingServiceImpl implements ReadingService {
                 .thenComparing(row -> parseReadingDate(row.getReadingDate()), Comparator.nullsLast(LocalDate::compareTo)));
 
         Map<String, BigDecimal> lastImportedReading = new HashMap<>();
+        Set<String> importedMonths = new HashSet<>();
         List<ReadingImportDetail> details = new ArrayList<>();
         for (int i = 0; i < sorted.size(); i++) {
             HistoricalReadingImportRow row = sorted.get(i);
             ReadingImportDetail detail = previewHistoricalReading(row, i + 1);
+            if (isWritable(detail)) {
+                String monthKey = detail.getWaterMeterId() + ":" + detail.getReadingDate().withDayOfMonth(1);
+                if (!importedMonths.add(monthKey)) {
+                    fail(detail, "导入文件中同一水表同月存在多条抄表记录");
+                }
+            }
             if (isWritable(detail) && lastImportedReading.containsKey(detail.getWaterMeterId())) {
                 applyHistoricalPrevious(detail, lastImportedReading.get(detail.getWaterMeterId()));
             }
@@ -500,6 +555,9 @@ public class ReadingServiceImpl implements ReadingService {
         if (household.isEmpty()) {
             return fail(detail, "水表不存在: " + row.getWaterMeterId());
         }
+        if (monthLockRepository.existsByBillYearAndBillMonth(readingDate.getYear(), readingDate.getMonthValue())) {
+            return fail(detail, "该月份已月结锁定，不能导入历史抄表记录");
+        }
         if (readingRepository.findByWaterMeterIdAndReadingDate(row.getWaterMeterId(), readingDate).isPresent()) {
             detail.setStatus("skip");
             detail.setMessage("同一水表同一天已有抄表记录，已跳过");
@@ -507,6 +565,16 @@ public class ReadingServiceImpl implements ReadingService {
         }
         detail.setHouseholdName(household.get().getHouseholdName());
         detail.setVillageName(household.get().getVillageName());
+        try {
+            accountingWriteGuard.requireNoLaterReading(row.getWaterMeterId(), readingDate);
+            Reading sameMonth = accountingWriteGuard.findReadingInMonth(row.getWaterMeterId(), readingDate)
+                    .orElse(null);
+            if (sameMonth != null) {
+                return fail(detail, "同月已有抄表记录: " + sameMonth.getReadingDate());
+            }
+        } catch (BusinessException e) {
+            return fail(detail, e.getMessage());
+        }
         BigDecimal previous = getLastReadingBefore(row.getWaterMeterId(), readingDate);
         BigDecimal usage = row.getCurrentReading().subtract(previous);
         detail.setPreviousReading(previous);
@@ -597,126 +665,6 @@ public class ReadingServiceImpl implements ReadingService {
     // ==================== 私有方法 ====================
 
     /**
-     * 处理单条抄表数据：计算用量 → 异常检测 → 保存 → 生成水费账单
-     *
-     * @param waterMeterId    水表编号
-     * @param currentReading  本次表底
-     * @param readingDate     抄表日期
-     * @param chargeableUsage 计费用水量（可选，不传则使用实际用量）
-     * @param note            备注
-     */
-    private Reading processSingleReading(String waterMeterId, BigDecimal currentReading,
-                                          LocalDate readingDate, BigDecimal chargeableUsage, String note) {
-        if (monthLockRepository.existsByBillYearAndBillMonth(readingDate.getYear(), readingDate.getMonthValue())) {
-            throw new BusinessException("该月份已月结锁定，不能修改抄表记录，请先解锁或走调账");
-        }
-
-        // 校验水表存在
-        Household household = householdRepository.findByWaterMeterId(waterMeterId)
-                .orElseThrow(() -> new BusinessException("水表不存在: " + waterMeterId));
-
-        // 获取上次表底
-        if (currentReading == null) {
-            throw new BusinessException("current reading is required: " + waterMeterId);
-        }
-        BigDecimal previousReading = getLastReadingBefore(waterMeterId, readingDate);
-        BigDecimal usageAmount = currentReading.subtract(previousReading);
-        if (usageAmount.compareTo(BigDecimal.ZERO) < 0) {
-            throw new BusinessException("current reading is lower than previous reading: " + waterMeterId);
-        }
-
-        // 计费用水量：优先使用传入值，否则使用实际用量
-        boolean hasManualChargeableUsage = chargeableUsage != null;
-        BigDecimal effectiveChargeable = hasManualChargeableUsage ? chargeableUsage : usageAmount;
-
-        // 异常检测
-        boolean isAbnormal = false;
-        String abnormalReason = null;
-        String anomaly = checkAbnormal(currentReading, previousReading);
-        if (anomaly != null) {
-            isAbnormal = true;
-            abnormalReason = anomaly;
-        }
-
-        // 保存抄表记录
-        Reading reading = Reading.builder()
-                .waterMeterId(waterMeterId)
-                .readingDate(readingDate)
-                .currentReading(currentReading)
-                .previousReading(previousReading)
-                .usageAmount(usageAmount)
-                .isAbnormal(isAbnormal)
-                .abnormalReason(abnormalReason)
-                .note(note)
-                .build();
-
-        // 检查当天是否已有记录（唯一约束 water_meter_id + reading_date）
-        var existingOpt = readingRepository
-                .findByWaterMeterIdAndReadingDate(waterMeterId, readingDate);
-        if (existingOpt.isPresent()) {
-            reading.setId(existingOpt.get().getId());
-        }
-
-        reading = readingRepository.save(reading);
-
-        if (isAbnormal && !hasManualChargeableUsage) {
-            return reading;
-        }
-
-        // 生成水费账单（应收水费 = 计费用水量 × 水价）
-        int billYear = readingDate.getYear();
-        int billMonth = readingDate.getMonthValue();
-
-        BigDecimal waterCharge = effectiveChargeable.compareTo(BigDecimal.ZERO) > 0
-                ? effectiveChargeable.multiply(waterPrice).setScale(2, RoundingMode.HALF_UP)
-                : BigDecimal.ZERO;
-
-        waterBillRepository
-                .findByWaterMeterIdAndBillYearAndBillMonth(waterMeterId, billYear, billMonth)
-                .ifPresentOrElse(
-                        existingBill -> {
-                            // 更新已有账单，同时重算状态（防止改量后已收账单变欠费死账）
-                            BigDecimal paid = existingBill.getActualWaterPaid() == null
-                                    ? BigDecimal.ZERO
-                                    : existingBill.getActualWaterPaid();
-                            if (paid.compareTo(waterCharge) > 0) {
-                                BigDecimal excess = paid.subtract(waterCharge).setScale(2, RoundingMode.HALF_UP);
-                                paid = waterCharge;
-                                saveOverpaymentAdjustment(waterMeterId, existingBill, excess);
-                            } else if (paid.compareTo(waterCharge) < 0) {
-                                BigDecimal prepaidDeduction = getPrepaidDeduction(waterMeterId, waterCharge.subtract(paid));
-                                if (prepaidDeduction.compareTo(BigDecimal.ZERO) > 0) {
-                                    paid = paid.add(prepaidDeduction);
-                                    savePrepaymentDeduction(waterMeterId, existingBill, prepaidDeduction);
-                                }
-                            }
-                            existingBill.setWaterAmount(effectiveChargeable);
-                            existingBill.setWaterCharge(waterCharge);
-                            existingBill.setActualWaterPaid(paid);
-                            existingBill.setWaterStatus(calcBillStatus(paid, waterCharge));
-                            waterBillRepository.save(existingBill);
-                        },
-                        () -> {
-                            // 新建账单
-                            BigDecimal prepaidDeduction = getPrepaidDeduction(waterMeterId, waterCharge);
-                            WaterBill bill = WaterBill.builder()
-                                    .waterMeterId(waterMeterId)
-                                    .billYear(billYear)
-                                    .billMonth(billMonth)
-                                    .waterAmount(effectiveChargeable)
-                                    .waterCharge(waterCharge)
-                                    .actualWaterPaid(prepaidDeduction)
-                                    .waterStatus(calcBillStatus(prepaidDeduction, waterCharge))
-                                    .note(buildPrepaymentNote(prepaidDeduction))
-                                    .build();
-                            bill = waterBillRepository.save(bill);
-                            savePrepaymentDeduction(waterMeterId, bill, prepaidDeduction);
-                        });
-
-        return reading;
-    }
-
-    /**
      * 获取某个水表在指定日期之前的最新表底
      */
     private BigDecimal getLastReadingBefore(String waterMeterId, LocalDate beforeDate) {
@@ -729,62 +677,6 @@ public class ReadingServiceImpl implements ReadingService {
             }
         }
         return BigDecimal.ZERO;
-    }
-
-    /**
-     * 根据已缴金额和应收金额计算账单状态
-     */
-    private String calcBillStatus(BigDecimal paid, BigDecimal total) {
-        paid = paid == null ? BigDecimal.ZERO : paid;
-        total = total == null ? BigDecimal.ZERO : total;
-        if (paid.compareTo(BigDecimal.ZERO) == 0) return "未收";
-        if (paid.compareTo(total) >= 0) return "已收";
-        return "部分收";
-    }
-
-    private BigDecimal getPrepaidDeduction(String waterMeterId, BigDecimal waterCharge) {
-        if (waterCharge.compareTo(BigDecimal.ZERO) <= 0) {
-            return BigDecimal.ZERO;
-        }
-        BigDecimal balance = prepaymentLogRepository.getBalance(waterMeterId);
-        if (balance == null || balance.compareTo(BigDecimal.ZERO) <= 0) {
-            return BigDecimal.ZERO;
-        }
-        return balance.min(waterCharge).setScale(2, RoundingMode.HALF_UP);
-    }
-
-    private String buildPrepaymentNote(BigDecimal prepaidDeduction) {
-        if (prepaidDeduction.compareTo(BigDecimal.ZERO) <= 0) {
-            return null;
-        }
-        return "已使用预存抵扣 " + prepaidDeduction.setScale(2, RoundingMode.HALF_UP) + " 元";
-    }
-
-    private void savePrepaymentDeduction(String waterMeterId, WaterBill bill, BigDecimal prepaidDeduction) {
-        if (prepaidDeduction.compareTo(BigDecimal.ZERO) <= 0) {
-            return;
-        }
-        prepaymentLogRepository.save(PrepaymentLog.builder()
-                .waterMeterId(waterMeterId)
-                .amount(prepaidDeduction.negate())
-                .type("AUTO_DEDUCT")
-                .billId(bill.getId())
-                .remark(bill.getBillYear() + "年" + bill.getBillMonth()
-                        + "月水费自动抵扣预存 " + prepaidDeduction.setScale(2, RoundingMode.HALF_UP) + " 元")
-                .build());
-    }
-
-    private void saveOverpaymentAdjustment(String waterMeterId, WaterBill bill, BigDecimal excess) {
-        if (excess.compareTo(BigDecimal.ZERO) <= 0) {
-            return;
-        }
-        prepaymentLogRepository.save(PrepaymentLog.builder()
-                .waterMeterId(waterMeterId)
-                .amount(excess)
-                .type("BILL_RECALC_OVERPAYMENT")
-                .billId(bill.getId())
-                .remark("bill recalculation overpayment " + excess.setScale(2, RoundingMode.HALF_UP))
-                .build());
     }
 
     /**

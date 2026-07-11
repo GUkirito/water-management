@@ -65,32 +65,38 @@ public class HouseholdController {
         return ApiResponse.ok("更新成功", householdService.update(id, request));
     }
 
-    @Operation(summary = "删除村民（物理删除）", description = "永久物理删除村民及关联的抄表记录、水费账单和缴费记录")
+    @Operation(summary = "删除或停用住户", description = "无历史数据时物理删除，存在抄表或账务历史时停用归档")
     @DeleteMapping("/delete/{id}")
     public ApiResponse<Void> delete(
             @Parameter(description = "村民ID") @PathVariable Long id,
             @RequestParam(defaultValue = "false") boolean confirm) {
         if (!confirm) {
-            throw new BusinessException("危险操作：永久删除住户需添加参数 ?confirm=true");
+            throw new BusinessException("危险操作：删除或停用住户需添加参数 ?confirm=true");
         }
         householdService.delete(id);
-        return ApiResponse.ok("删除成功", null);
+        return ApiResponse.ok("删除或停用完成", null);
     }
 
     @Operation(summary = "批量删除村民")
     @PostMapping("/batch-delete")
-    public ApiResponse<Void> batchDelete(@RequestBody Map<String, List<Long>> body) {
-        if (body.get("ids") == null || body.get("ids").isEmpty()) {
+    public ApiResponse<Void> batchDelete(@RequestBody Map<String, Object> body) {
+        if (!(body.get("ids") instanceof List<?> rawIds) || rawIds.isEmpty()) {
             return ApiResponse.fail("参数 ids 不能为空");
         }
         if (!Boolean.TRUE.equals(body.get("confirm"))) {
-            throw new BusinessException("危险操作：批量永久删除住户需传 confirm=true");
+            throw new BusinessException("危险操作：批量删除或停用住户需传 confirm=true");
         }
-        householdService.batchDelete(body.get("ids"));
-        return ApiResponse.ok("批量删除成功", null);
+        List<Long> ids = rawIds.stream().map(value -> {
+            if (!(value instanceof Number number)) {
+                throw new BusinessException("参数 ids 格式错误");
+            }
+            return number.longValue();
+        }).toList();
+        householdService.batchDelete(ids);
+        return ApiResponse.ok("批量删除或停用完成", null);
     }
 
-    @Operation(summary = "按村组删除（需二次确认）", description = "物理删除指定村组下的所有户")
+    @Operation(summary = "按村组删除或停用（需二次确认）", description = "无历史数据时删除，存在历史数据时停用归档")
     @DeleteMapping("/delete-by-village")
     public ApiResponse<Void> deleteByVillage(
             @RequestParam String villageName,
@@ -99,7 +105,7 @@ public class HouseholdController {
             throw new BusinessException("危险操作：删除整个村组需添加参数 ?confirm=true");
         }
         householdService.deleteByVillage(villageName);
-        return ApiResponse.ok("删除成功", null);
+        return ApiResponse.ok("删除或停用完成", null);
     }
 
     @Operation(summary = "批量修改村民的村组名称")

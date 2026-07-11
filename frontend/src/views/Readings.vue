@@ -71,7 +71,7 @@
                 </el-form-item>
                 <div class="wm-table-actions">
                   <el-button type="primary" size="small" @click="saveHousehold" :loading="savingHousehold">保存</el-button>
-                  <el-button v-if="householdForm.id" type="danger" size="small" @click="deleteHousehold">永久删除</el-button>
+                  <el-button v-if="householdForm.id" type="danger" size="small" @click="deleteHousehold">删除或停用</el-button>
                 </div>
               </el-form>
             </div>
@@ -85,7 +85,7 @@
         <section class="wm-toolbar wm-reading-toolbar">
           <div class="wm-toolbar-group">
             <span class="wm-toolbar-label">抄表日期</span>
-            <el-date-picker v-model="readingDate" type="date" placeholder="选择日期" value-format="YYYY-MM-DD" @change="loadTable" style="width:160px" size="small" />
+            <el-date-picker v-model="readingDate" type="date" placeholder="选择日期" value-format="YYYY-MM-DD" @change="changeReadingDate" style="width:160px" size="small" />
           </div>
           <div class="wm-toolbar-group wm-reading-progress-inline">
             <span>已完成 <strong>{{ completedCount }}</strong> / {{ totalCount }}</span>
@@ -253,10 +253,14 @@ import { ref, reactive, onMounted, computed, nextTick, onBeforeUnmount, watch } 
 import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
 import { Menu } from '@element-plus/icons-vue'
 import { useRoute } from 'vue-router'
+import { onBeforeRouteLeave } from 'vue-router'
 import { householdApi, readingApi, paymentApi } from '@/api'
+import { formatLocalDate } from '@/utils/localDate'
+import { createEditableSnapshot, dirtyRows } from '@/utils/dirtyRows'
 
 const route = useRoute()
-const readingDate = ref(new Date().toISOString().slice(0, 10))
+const readingDate = ref(formatLocalDate())
+const loadedReadingDate = ref(readingDate.value)
 const selectedVillage = ref('')
 const sidebarOpen = ref(false)
 const allVillages = ref([])
@@ -347,7 +351,9 @@ function updateTableHeight() {
   tableHeight.value = Math.max(320, Math.floor(shell.clientHeight - paginationHeight - 6))
 }
 
-function selectVillage(v) {
+async function selectVillage(v) {
+  if (v === selectedVillage.value) return
+  if (!(await confirmDiscardChanges())) return
   selectedVillage.value = v
   filterKeyword.value = ''
   tableKeyword.value = ''
@@ -356,6 +362,15 @@ function selectVillage(v) {
   sidebarOpen.value = false
   loadHouseholdList()
   loadTable()
+}
+
+async function changeReadingDate(value) {
+  if (await confirmDiscardChanges()) {
+    loadedReadingDate.value = value
+    await loadTable()
+  } else {
+    readingDate.value = loadedReadingDate.value
+  }
 }
 
 async function loadAllVillages() {
@@ -433,14 +448,14 @@ async function saveHousehold() {
 async function deleteHousehold() {
   if (!householdForm.id) return
   try {
-    await ElMessageBox.confirm('确认永久删除该住户及其关联数据吗？此操作不可恢复。', '确认永久删除', { type: 'warning' })
+    await ElMessageBox.confirm('确认处理该住户吗？无历史数据时删除，存在抄表或账务历史时将停用并保留记录。', '确认删除或停用', { type: 'warning' })
   } catch (error) {
     console.warn('取消删除住户:', error)
     return
   }
   try {
     await householdApi.delete(householdForm.id)
-    ElMessage.success('已永久删除')
+    ElMessage.success('已删除或停用')
     selectedHousehold.value = null
     loadHouseholdList()
     loadTable()
@@ -523,6 +538,8 @@ async function loadTable() {
       abnormalReason: ''
     }
   }).sort((a, b) => Number(b.hasUnpaidBill) - Number(a.hasUnpaidBill))
+  tableData.value.forEach(row => { row.originalSnapshot = createEditableSnapshot(row) })
+  loadedReadingDate.value = readingDate.value
   const hasRouteTarget = applyRouteTarget()
   nextTick(() => {
     updateTableHeight()
@@ -613,7 +630,7 @@ function refreshReadingsPage() {
 async function batchDeleteHouseholds() {
   if (!selectedHouseholdIds.value.length) return
   try {
-    await ElMessageBox.confirm(`确认永久删除选中的 ${selectedHouseholdIds.value.length} 户及其关联数据吗？`, '确认批量删除', { type: 'warning' })
+    await ElMessageBox.confirm(`确认处理选中的 ${selectedHouseholdIds.value.length} 户吗？无历史数据时删除，存在历史数据时停用并保留记录。`, '确认批量删除或停用', { type: 'warning' })
   } catch (error) {
     console.warn('取消批量删除住户:', error)
     return
@@ -622,8 +639,8 @@ async function batchDeleteHouseholds() {
     const deletedCount = selectedHouseholdIds.value.length
     await householdApi.batchDelete(selectedHouseholdIds.value)
     ElNotification({
-      title: '删除成功',
-      message: `已删除 ${deletedCount} 条记录`,
+      title: '处理完成',
+      message: `已删除或停用 ${deletedCount} 户`,
       type: 'success',
       duration: 3000
     })
@@ -887,29 +904,42 @@ async function batchSave() {
     ElMessage.warning('请先选择村组')
     return
   }
-  const items = tableData.value.filter(r => r.currentReading && !isNaN(r.currentReading)).map(r => {
+  const changedRows = dirtyRows(tableData.value)
+  const items = changedRows.filter(r => r.currentReading !== null && r.currentReading !== '' && !isNaN(r.currentReading)).map(r => {
     const item = { waterMeterId: r.waterMeterId, currentReading: parseFloat(r.currentReading) }
     if (r.chargeableUsage != null && !isNaN(r.chargeableUsage)) item.chargeableUsage = parseFloat(r.chargeableUsage)
     if (r.note) item.note = r.note
     return item
   })
   if (!items.length) {
-    ElMessage.warning('请至少输入一个表底')
+    ElMessage.warning(changedRows.length ? '修改行需要填写有效表底' : '没有需要保存的修改')
     return
   }
   saving.value = true
   try {
     const r = await readingApi.batchSave(items, readingDate.value)
-    const savedCount = r?.total || items.length
-    ElNotification({
-      title: '保存成功',
-      message: `共更新 ${savedCount} 条抄表记录`,
-      type: 'success',
-      duration: 3000
+    const savedCount = r?.total ?? 0
+    const abnormalCount = r?.abnormal ?? 0
+    const failedCount = r?.fail ?? 0
+    const successfulMeters = new Set((r?.details || [])
+      .filter(detail => detail.status === 'success' || detail.status === 'abnormal')
+      .map(detail => detail.waterMeterId))
+    tableData.value.forEach(row => {
+      if (successfulMeters.has(row.waterMeterId)) row.originalSnapshot = createEditableSnapshot(row)
     })
-    loadTable()
+    const failedDetails = (r?.details || []).filter(detail => detail.status === 'fail')
+    ElNotification({
+      title: failedCount ? (savedCount ? '部分保存失败' : '保存失败') : '保存成功',
+      message: failedCount
+        ? `成功 ${savedCount} 条，异常 ${abnormalCount} 条，失败 ${failedCount} 条：${failedDetails.map(detail => `${detail.householdName || detail.waterMeterId}（${detail.message}）`).join('；')}`
+        : `共更新 ${savedCount} 条抄表记录，其中异常 ${abnormalCount} 条`,
+      type: failedCount ? (savedCount ? 'warning' : 'error') : 'success',
+      duration: failedCount ? 8000 : 3000
+    })
+    if (!failedCount) await loadTable()
   } catch (error) {
     console.warn('批量保存抄表失败', error)
+    ElMessage.error('批量保存失败：' + (error?.message || error))
   } finally {
     saving.value = false
   }
@@ -945,7 +975,32 @@ onMounted(async () => {
   window.addEventListener('resize', updateTableHeight, { passive: true })
   window.addEventListener('wm-refresh', refreshReadingsPage)
   window.addEventListener('wm-new', addNewHousehold)
+  window.addEventListener('beforeunload', handleBeforeUnload)
 })
+
+function hasUnsavedChanges() {
+  return dirtyRows(tableData.value).length > 0
+}
+
+async function confirmDiscardChanges() {
+  if (!hasUnsavedChanges()) return true
+  try {
+    await ElMessageBox.confirm('当前有未保存的抄表修改，离开后将丢失。是否继续？', '未保存修改', {
+      type: 'warning', confirmButtonText: '放弃修改', cancelButtonText: '继续编辑'
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
+function handleBeforeUnload(event) {
+  if (!hasUnsavedChanges()) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+
+onBeforeRouteLeave(async () => confirmDiscardChanges())
 
 watch([selectedVillage, tablePage, tablePageSize], () => {
   nextTick(updateTableHeight)
@@ -959,6 +1014,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', updateTableHeight)
   window.removeEventListener('wm-refresh', refreshReadingsPage)
   window.removeEventListener('wm-new', addNewHousehold)
+  window.removeEventListener('beforeunload', handleBeforeUnload)
 })
 </script>
 

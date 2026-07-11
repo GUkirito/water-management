@@ -1,0 +1,42 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "村级自来水管理系统",
+  "version": "1.7.6",
+  "identifier": "com.example.watermanagement",
+  "build": {
+    "frontendDist": "../src/main/resources/static"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": []
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["msi", "nsis"],
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/icon.ico"
+    ],
+    "resources": [
+      "../target/*.jar",
+      "../target/custom-jre"
+    ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "wix": {
+        "language": "zh-CN"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJEQkNBNjY1RkU5MUNBQTgKUldTb3lwSCtaYWE4TGNUU0NUWTh2WEd4ZEFGOWdEdE1KSldrNytCa0RidUZ5ejN5ZXp3aThiV3AK",
+      "endpoints": [
+        "https://github.com/GUkirito/water-management/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}

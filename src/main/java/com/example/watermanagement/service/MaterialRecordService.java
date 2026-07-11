@@ -31,6 +31,8 @@ public interface MaterialRecordService {
 
     Map<String, Object> importFromExcel(InputStream inputStream, String defaultCollector);
 
+    Map<String, Object> previewImportFromExcel(InputStream inputStream);
+
     void exportToExcel(String villageName, String status, String keyword,
                        LocalDate paidDateFrom, LocalDate paidDateTo,
                        HttpServletResponse response) throws IOException;

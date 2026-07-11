@@ -49,7 +49,7 @@
             </div>
             <div class="wm-kpi-card">
               <div class="wm-kpi-label">收缴率</div>
-              <div class="wm-kpi-value">{{ waterStats.rate }}%</div>
+              <div class="wm-kpi-value">{{ waterStats.rate == null ? '无账单' : `${waterStats.rate}%` }}</div>
             </div>
           </div>
 
@@ -126,7 +126,7 @@
             </div>
             <div class="wm-kpi-card">
               <div class="wm-kpi-label">收缴率</div>
-              <div class="wm-kpi-value">{{ matStats.rate }}%</div>
+              <div class="wm-kpi-value">{{ matStats.rate == null ? '无账单' : `${matStats.rate}%` }}</div>
             </div>
           </div>
 
@@ -167,16 +167,18 @@
 import { ref, reactive, onBeforeUnmount, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { householdApi, reportApi, materialRecordApi } from '@/api'
+import { calculateCollectionRate } from '@/utils/collectionRate'
+import { formatLocalMonth } from '@/utils/localDate'
 
 const activeTab = ref('water')
 
 // ===== 水费月报 =====
-const waterMonth = ref(new Date().toISOString().slice(0, 7))
+const waterMonth = ref(formatLocalMonth())
 const waterVillages = ref([])
 const waterVillageList = ref([])   // 来源：household 表
 const waterData = ref([])
 const waterLoading = ref(false)
-const waterStats = reactive({ count: 0, charge: '0.00', paid: '0.00', unpaid: '0.00', rate: '0.0' })
+const waterStats = reactive({ count: 0, charge: '0.00', paid: '0.00', unpaid: '0.00', rate: null })
 
 // ===== 材料费统计 =====
 const matVillage = ref('')
@@ -186,7 +188,7 @@ const matDateRange = ref([])
 const matVillageList = ref([])     // 来源：material_records 表（独立）
 const materialData = ref([])
 const matLoading = ref(false)
-const matStats = reactive({ count: 0, totalFee: '0.00', actualPaid: '0.00', unpaid: '0.00', rate: '0.0' })
+const matStats = reactive({ count: 0, totalFee: '0.00', actualPaid: '0.00', unpaid: '0.00', rate: null })
 let matVillageLoaded = false
 
 onMounted(async () => {
@@ -277,7 +279,7 @@ function computeWaterStats() {
   waterStats.charge = charge.toFixed(2)
   waterStats.paid = paid.toFixed(2)
   waterStats.unpaid = unpaid.toFixed(2)
-  waterStats.rate = charge > 0 ? ((paid / charge) * 100).toFixed(1) : '100.0'
+  waterStats.rate = calculateCollectionRate(charge, paid)
 }
 
 async function exportWaterReport() {
@@ -335,7 +337,7 @@ function computeMatStats() {
   matStats.totalFee = totalFee.toFixed(2)
   matStats.actualPaid = actualPaid.toFixed(2)
   matStats.unpaid = unpaid.toFixed(2)
-  matStats.rate = totalFee > 0 ? ((actualPaid / totalFee) * 100).toFixed(1) : '100.0'
+  matStats.rate = calculateCollectionRate(totalFee, actualPaid)
 }
 
 function resetMaterialFilter() {

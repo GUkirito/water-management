@@ -2,6 +2,7 @@ package com.example.watermanagement.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.DecimalMin;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -21,6 +22,7 @@ public class ReadingBatchItem {
     private BigDecimal currentReading;
 
     /** 计费用水量（可选，不传则使用实际用量 currentReading - previousReading） */
+    @DecimalMin(value = "0.0", message = "计费用水量不能为负数")
     private BigDecimal chargeableUsage;
 
     /** 备注 */

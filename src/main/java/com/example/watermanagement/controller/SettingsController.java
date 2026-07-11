@@ -1,7 +1,9 @@
 package com.example.watermanagement.controller;
 
 import com.example.watermanagement.dto.ApiResponse;
+import com.example.watermanagement.dto.DatabaseRestoreStage;
 import com.example.watermanagement.exception.BusinessException;
+import com.example.watermanagement.service.DatabaseSnapshotService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
@@ -22,8 +24,6 @@ import java.io.OutputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
@@ -36,8 +36,13 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class SettingsController {
 
+    private final DatabaseSnapshotService databaseSnapshotService;
+
     @Value("${spring.datasource.url}")
     private String datasourceUrl;
+
+    @Value("${server.address:127.0.0.1}")
+    private String serverAddress;
 
     @Operation(summary = "获取系统设置信息", description = "返回数据库路径等系统信息")
     @GetMapping("/info")
@@ -46,65 +51,50 @@ public class SettingsController {
         String dbPath = getDbFile().getAbsolutePath();
         String home = System.getProperty("user.home");
         info.put("dbFilePath", dbPath.startsWith(home) ? "~" + dbPath.substring(home.length()) : dbPath);
+        boolean lanAccessEnabled = !("127.0.0.1".equals(serverAddress)
+                || "localhost".equalsIgnoreCase(serverAddress)
+                || "::1".equals(serverAddress));
+        info.put("serverAddress", serverAddress);
+        info.put("lanAccessEnabled", Boolean.toString(lanAccessEnabled));
         return ApiResponse.ok(info);
     }
 
     @Operation(summary = "下载数据库备份", description = "下载当前 SQLite 数据库文件")
     @GetMapping("/backup/download")
     public void downloadBackup(HttpServletResponse response) throws IOException {
-        File dbFile = getDbFile();
-        if (!dbFile.exists()) {
-            throw new BusinessException("数据库文件不存在: " + dbFile.getAbsolutePath());
-        }
-
-        String filename = "backup_" + LocalDate.now() + "_water_meter.db";
+        var snapshot = databaseSnapshotService.createVerifiedSnapshot("download");
+        String filename = "backup_" + LocalDateTime.now()
+                .format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + "_water_meter.db";
         String encodedFilename = URLEncoder.encode(filename, StandardCharsets.UTF_8)
                 .replace("+", "%20");
+        try {
+            response.setContentType("application/octet-stream");
+            response.setHeader("Content-Disposition",
+                    "attachment; filename*=UTF-8''" + encodedFilename);
+            response.setContentLengthLong(Files.size(snapshot));
 
-        response.setContentType("application/octet-stream");
-        response.setHeader("Content-Disposition",
-                "attachment; filename*=UTF-8''" + encodedFilename);
-        response.setContentLengthLong(dbFile.length());
-
-        try (FileInputStream fis = new FileInputStream(dbFile);
-             OutputStream os = response.getOutputStream()) {
-            byte[] buffer = new byte[8192];
-            int bytesRead;
-            while ((bytesRead = fis.read(buffer)) != -1) {
-                os.write(buffer, 0, bytesRead);
+            try (FileInputStream fis = new FileInputStream(snapshot.toFile());
+                 OutputStream os = response.getOutputStream()) {
+                fis.transferTo(os);
+                os.flush();
             }
-            os.flush();
+            log.info("Database backup downloaded: {}", filename);
+        } finally {
+            Files.deleteIfExists(snapshot);
         }
-
-        log.info("Database backup downloaded: {}", filename);
     }
 
     @Operation(summary = "恢复数据库备份", description = "上传 SQLite 数据库文件并替换当前数据库，替换前会自动创建回滚备份")
     @PostMapping("/backup/restore")
-    public ApiResponse<Map<String, String>> restoreBackup(@RequestParam("file") MultipartFile file) throws IOException {
+    public ApiResponse<DatabaseRestoreStage> restoreBackup(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "desktopMode", defaultValue = "false") boolean desktopMode) throws IOException {
         if (file == null || file.isEmpty()) {
             throw new BusinessException("请选择要恢复的数据库备份文件");
         }
-
-        File dbFile = getDbFile();
-        File dbDir = dbFile.getParentFile();
-        if (dbDir != null) {
-            dbDir.mkdirs();
-        }
-
-        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-        File rollbackFile = new File(dbDir, "rollback_before_restore_" + timestamp + ".db");
-        if (dbFile.exists()) {
-            Files.copy(dbFile.toPath(), rollbackFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
-        }
-
-        Files.copy(file.getInputStream(), dbFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
-
-        Map<String, String> result = new HashMap<>();
-        result.put("dbFilePath", dbFile.getAbsolutePath());
-        result.put("rollbackFilePath", rollbackFile.getAbsolutePath());
-        log.warn("Database restored from uploaded backup. rollback={}", rollbackFile.getAbsolutePath());
-        return ApiResponse.ok("恢复成功，请重启应用后继续使用", result);
+        DatabaseRestoreStage result = databaseSnapshotService.stageRestore(file.getInputStream(), desktopMode);
+        log.warn("Database restore staged: token={}, desktopMode={}", result.token(), desktopMode);
+        return ApiResponse.ok(result.message(), result);
     }
 
     private File getDbFile() {
