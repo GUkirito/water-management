@@ -154,8 +154,9 @@
               </el-table-column>
               <el-table-column label="状态" width="78" resizable>
                 <template #default="{ row }">
-                  <el-tag v-if="row.isAbnormal" type="danger" size="small">异常</el-tag>
-                  <el-tag v-else-if="row.currentReading" type="success" size="small">正常</el-tag>
+                  <el-tag v-if="isRowDirty(row)" type="warning" size="small">未保存</el-tag>
+                  <el-tag v-else-if="row.isAbnormal" type="danger" size="small">异常</el-tag>
+                  <el-tag v-else-if="hasValidCurrentReading(row)" type="success" size="small">正常</el-tag>
                   <el-tag v-else type="info" size="small">-</el-tag>
                 </template>
               </el-table-column>
@@ -190,21 +191,25 @@
           </div>
         </section>
 
-        <section class="batch-actions">
-          <span class="wm-chip">已完成 {{ completedCount }} / {{ totalCount }}</span>
-          <template v-if="selectedHouseholdIds.length>0">
-            <span class="wm-chip">已选 {{ selectedHouseholdIds.length }} 户</span>
-            <span class="wm-batch-label">批量改村组</span>
-            <el-select v-model="batchVillage" placeholder="选择村组" size="small" class="wm-batch-select" filterable allow-create>
-              <el-option v-for="v in allVillages" :key="v" :label="v" :value="v" />
-            </el-select>
-            <el-button size="small" type="primary" plain @click="applyBatchVillage" :disabled="!batchVillage">应用</el-button>
-          </template>
+        <section class="wm-toolbar wm-household-batch-actions">
+          <strong>住户资料批量操作</strong>
+          <span class="wm-chip">已选 {{ selectedHouseholdIds.length }} 户</span>
+          <span class="wm-batch-label">修改所选住户的村组</span>
+          <el-select v-model="batchVillage" placeholder="选择村组" size="small" class="wm-batch-select" filterable allow-create>
+            <el-option v-for="v in allVillages" :key="v" :label="v" :value="v" />
+          </el-select>
+          <el-button size="small" type="primary" plain @click="applyBatchVillage" :disabled="!batchVillage || selectedHouseholdIds.length===0">应用</el-button>
           <div class="wm-toolbar-spacer"></div>
-          <el-button size="small" type="primary" @click="batchSave" :loading="saving">批量保存</el-button>
           <el-button size="small" type="danger" @click="batchDeleteHouseholds" :disabled="selectedHouseholdIds.length===0">
-            批量删除({{ selectedHouseholdIds.length }})
+            删除或停用所选住户
           </el-button>
+        </section>
+
+        <section class="batch-actions">
+          <span class="wm-chip" :class="{ 'is-pending': unsavedCount > 0 }">未保存 {{ unsavedCount }} 户</span>
+          <span class="wm-save-hint">保存后将生成或更新对应月份的水费账单</span>
+          <div class="wm-toolbar-spacer"></div>
+          <el-button size="small" type="primary" @click="batchSave" :loading="saving" :disabled="unsavedCount===0">保存本次抄表</el-button>
         </section>
 
         <el-dialog v-model="importResultVisible" :title="importResultTitle" width="640px" :close-on-click-modal="false">
@@ -252,13 +257,20 @@
 import { ref, reactive, onMounted, computed, nextTick, onBeforeUnmount, watch } from 'vue'
 import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
 import { Menu } from '@element-plus/icons-vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { onBeforeRouteLeave } from 'vue-router'
 import { householdApi, readingApi, paymentApi } from '@/api'
 import { formatLocalDate } from '@/utils/localDate'
-import { createEditableSnapshot, dirtyRows } from '@/utils/dirtyRows'
+import { createEditableSnapshot, dirtyRows, isRowDirty } from '@/utils/dirtyRows'
+import {
+  applyReadingSaveResult,
+  buildReadingSaveItems,
+  hasValidCurrentReading,
+  summarizeHouseholdRemovals
+} from '@/utils/readingSave'
 
 const route = useRoute()
+const router = useRouter()
 const readingDate = ref(formatLocalDate())
 const loadedReadingDate = ref(readingDate.value)
 const selectedVillage = ref('')
@@ -268,9 +280,10 @@ const filterKeyword = ref('')
 const waterPrice = ref(1.8)
 const abnormalThreshold = ref(100)
 const completedCount = computed(() => {
-  return tableData.value.filter(r => r.currentReading && r.currentReading !== '' && !isNaN(Number(r.currentReading))).length
+  return tableData.value.filter(hasValidCurrentReading).length
 })
 const totalCount = computed(() => tableData.value.length)
+const unsavedCount = computed(() => dirtyRows(tableData.value).length)
 const progressPercent = computed(() => {
   return totalCount.value > 0 ? Math.round((completedCount.value / totalCount.value) * 100) : 0
 })
@@ -454,8 +467,8 @@ async function deleteHousehold() {
     return
   }
   try {
-    await householdApi.delete(householdForm.id)
-    ElMessage.success('已删除或停用')
+    const result = await householdApi.delete(householdForm.id)
+    ElMessage.success(summarizeHouseholdRemovals(result).message)
     selectedHousehold.value = null
     loadHouseholdList()
     loadTable()
@@ -636,11 +649,11 @@ async function batchDeleteHouseholds() {
     return
   }
   try {
-    const deletedCount = selectedHouseholdIds.value.length
-    await householdApi.batchDelete(selectedHouseholdIds.value)
+    const results = await householdApi.batchDelete(selectedHouseholdIds.value)
+    const summary = summarizeHouseholdRemovals(results)
     ElNotification({
       title: '处理完成',
-      message: `已删除或停用 ${deletedCount} 户`,
+      message: summary.message,
       type: 'success',
       duration: 3000
     })
@@ -900,17 +913,8 @@ async function exportTemplate() {
 }
 
 async function batchSave() {
-  if (!selectedVillage.value) {
-    ElMessage.warning('请先选择村组')
-    return
-  }
   const changedRows = dirtyRows(tableData.value)
-  const items = changedRows.filter(r => r.currentReading !== null && r.currentReading !== '' && !isNaN(r.currentReading)).map(r => {
-    const item = { waterMeterId: r.waterMeterId, currentReading: parseFloat(r.currentReading) }
-    if (r.chargeableUsage != null && !isNaN(r.chargeableUsage)) item.chargeableUsage = parseFloat(r.chargeableUsage)
-    if (r.note) item.note = r.note
-    return item
-  })
+  const items = buildReadingSaveItems(tableData.value)
   if (!items.length) {
     ElMessage.warning(changedRows.length ? '修改行需要填写有效表底' : '没有需要保存的修改')
     return
@@ -921,12 +925,7 @@ async function batchSave() {
     const savedCount = r?.total ?? 0
     const abnormalCount = r?.abnormal ?? 0
     const failedCount = r?.fail ?? 0
-    const successfulMeters = new Set((r?.details || [])
-      .filter(detail => detail.status === 'success' || detail.status === 'abnormal')
-      .map(detail => detail.waterMeterId))
-    tableData.value.forEach(row => {
-      if (successfulMeters.has(row.waterMeterId)) row.originalSnapshot = createEditableSnapshot(row)
-    })
+    applyReadingSaveResult(tableData.value, r)
     const failedDetails = (r?.details || []).filter(detail => detail.status === 'fail')
     ElNotification({
       title: failedCount ? (savedCount ? '部分保存失败' : '保存失败') : '保存成功',
@@ -936,10 +935,21 @@ async function batchSave() {
       type: failedCount ? (savedCount ? 'warning' : 'error') : 'success',
       duration: failedCount ? 8000 : 3000
     })
-    if (!failedCount) await loadTable()
+    if (savedCount > 0 && !failedCount) {
+      try {
+        await ElMessageBox.confirm('本次抄表已保存并生成或更新账单，是否前往缴费页面查看？', '保存完成', {
+          type: 'success',
+          confirmButtonText: '前往缴费',
+          cancelButtonText: '继续抄表'
+        })
+        await router.push('/billing')
+      } catch (error) {
+        if (error !== 'cancel' && error !== 'close') console.warn('前往缴费页面失败', error)
+      }
+    }
   } catch (error) {
-    console.warn('批量保存抄表失败', error)
-    ElMessage.error('批量保存失败：' + (error?.message || error))
+    console.warn('保存本次抄表失败', error)
+    ElMessage.error('保存本次抄表失败：' + (error?.message || error))
   } finally {
     saving.value = false
   }
@@ -1178,6 +1188,30 @@ onBeforeUnmount(() => {
   z-index: 10;
 }
 
+.wm-household-batch-actions {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 6px 10px;
+  gap: 8px;
+}
+
+.wm-household-batch-actions strong {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.wm-save-hint {
+  color: var(--wm-text-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.wm-chip.is-pending {
+  border-color: #f59e0b;
+  background: #fffbeb;
+  color: #b45309;
+}
+
 .wm-batch-label {
   color: var(--wm-text-2);
   font-size: 12px;
@@ -1298,6 +1332,7 @@ onBeforeUnmount(() => {
   }
 
   .wm-reading-toolbar,
+  .wm-household-batch-actions,
   .batch-actions {
     flex-wrap: wrap;
   }
