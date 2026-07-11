@@ -173,6 +173,44 @@ class AccountingHealthServiceTests {
                         "NEGATIVE_PREPAYMENT_BALANCE");
     }
 
+    @Test
+    void acceptsZeroAmountBillOnlyWhenStatusIsNoPaymentRequired() {
+        householdRepository.save(Household.builder()
+                .householdName("zero valid")
+                .waterMeterId("WM-ZERO-VALID")
+                .villageName("village")
+                .phone("")
+                .isActive(true)
+                .build());
+        householdRepository.save(Household.builder()
+                .householdName("zero invalid")
+                .waterMeterId("WM-ZERO-INVALID")
+                .villageName("village")
+                .phone("")
+                .isActive(true)
+                .build());
+
+        WaterBill valid = waterBill("WM-ZERO-VALID", 2026, 7, "0.00", "0.00");
+        valid.setWaterAmount(BigDecimal.ZERO);
+        valid.setWaterStatus("无需缴费");
+        valid = waterBillRepository.save(valid);
+
+        WaterBill invalid = waterBill("WM-ZERO-INVALID", 2026, 7, "0.00", "0.00");
+        invalid.setWaterAmount(BigDecimal.ZERO);
+        invalid.setWaterStatus("未收");
+        invalid = waterBillRepository.save(invalid);
+
+        List<AccountingHealthIssue> issues = accountingHealthService.check();
+
+        Long validId = valid.getId();
+        Long invalidId = invalid.getId();
+        assertThat(issues)
+                .filteredOn(issue -> "INCONSISTENT_WATER_BILL_STATUS".equals(issue.getType()))
+                .extracting(AccountingHealthIssue::getRefId)
+                .doesNotContain(validId)
+                .contains(invalidId);
+    }
+
     private WaterBill waterBill(String meterId, int year, int month, String charge, String paid) {
         return WaterBill.builder()
                 .waterMeterId(meterId)

@@ -116,6 +116,8 @@ export const reportApi = {
 // ==================== 系统设置 ====================
 export const accountingApi = {
   healthCheck: () => api.get('/accounting/health-check'),
+  repairPreview: (data) => api.post('/accounting/health/repair/preview', data, { silentError: true }),
+  repairExecute: (data) => api.post('/accounting/health/repair/execute', data, { silentError: true }),
   listMonthLocks: () => api.get('/accounting/month-locks'),
   lockMonth: (data) => api.post('/accounting/month-locks', data),
   unlockMonth: (params) => api.delete('/accounting/month-locks', { params }),

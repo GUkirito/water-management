@@ -160,6 +160,7 @@ public class AccountingHealthServiceImpl implements AccountingHealthService {
     private String expectedStatus(WaterBill bill) {
         BigDecimal paid = nvl(bill.getActualWaterPaid());
         BigDecimal charge = nvl(bill.getWaterCharge());
+        if (charge.signum() == 0 && paid.signum() == 0) return "无需缴费";
         if (paid.signum() <= 0) return "未收";
         if (paid.compareTo(charge) >= 0) return "已收";
         return "部分收";

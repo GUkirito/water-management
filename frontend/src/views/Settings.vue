@@ -98,11 +98,120 @@
           <el-table-column label="说明" min-width="320" show-overflow-tooltip>
             <template #default="{ row }">{{ healthMessage(row) }}</template>
           </el-table-column>
+          <el-table-column label="处理" width="120" fixed="right">
+            <template #default="{ row }">
+              <el-button
+                link
+                type="primary"
+                :loading="previewingIssueKey === healthIssueKey(row)"
+                @click="openRepairPreview(row)"
+              >
+                查看处理方式
+              </el-button>
+            </template>
+          </el-table-column>
         </el-table>
       </div>
     </section>
 
-    <section class="wm-panel">
+    <el-dialog
+      v-model="repairDialogVisible"
+      title="账务问题处理"
+      width="760px"
+      :close-on-click-modal="false"
+      :close-on-press-escape="!executingRepair"
+      :show-close="!executingRepair"
+      :before-close="closeRepairDialog"
+      class="wm-repair-dialog"
+    >
+      <template v-if="repairPreview">
+        <el-alert
+          :title="repairPreview.repairable ? '该问题可以按明确规则修复' : '该问题需要人工核对'"
+          :type="repairPreview.repairable ? 'warning' : 'info'"
+          :description="repairPreview.cause || healthMessage(selectedHealthIssue)"
+          show-icon
+          :closable="false"
+        />
+
+        <div v-if="repairPreview.repairable" class="wm-repair-content">
+          <div class="wm-repair-section">
+            <div class="wm-repair-heading">修复前后变化</div>
+            <el-table :data="repairChanges" border size="small">
+              <el-table-column prop="record" label="记录" min-width="210" />
+              <el-table-column prop="before" label="修复前" min-width="190" />
+              <el-table-column prop="after" label="修复后" min-width="190" />
+            </el-table>
+          </div>
+
+          <div class="wm-repair-section">
+            <div class="wm-repair-heading">受影响记录</div>
+            <ul class="wm-repair-records">
+              <li v-for="record in repairPreview.affectedRecords || []" :key="`${record.recordType}-${record.recordId}`">
+                {{ affectedRecordText(record) }}
+              </li>
+            </ul>
+          </div>
+
+          <el-alert
+            v-if="repairPreview.snapshotRequired"
+            title="修复前会先创建并校验数据库快照"
+            description="只有备份成功后才会修改账务数据；若复检未通过，本次修改会回滚。"
+            type="info"
+            show-icon
+            :closable="false"
+          />
+
+          <el-form v-if="!repairResult" label-width="90px" class="wm-repair-form">
+            <el-form-item label="操作人" required>
+              <el-input v-model="repairForm.operator" maxlength="50" placeholder="请输入实际操作人" :disabled="executingRepair" />
+            </el-form-item>
+            <el-form-item label="修复原因" required>
+              <el-input
+                v-model="repairForm.reason"
+                type="textarea"
+                :rows="3"
+                maxlength="200"
+                show-word-limit
+                placeholder="请说明本次修复依据"
+                :disabled="executingRepair"
+              />
+            </el-form-item>
+          </el-form>
+
+          <el-result v-else icon="success" title="账务修复完成" sub-title="系统已重新执行账务健康检查">
+            <template #extra>
+              <el-descriptions :column="1" border size="small" class="wm-repair-result-details">
+                <el-descriptions-item label="数据库快照">{{ repairResult.snapshotName }}</el-descriptions-item>
+                <el-descriptions-item label="审计编号">{{ repairResult.auditId }}</el-descriptions-item>
+              </el-descriptions>
+            </template>
+          </el-result>
+        </div>
+
+        <div v-else class="wm-repair-manual">
+          <p>{{ healthMessage(selectedHealthIssue) }}</p>
+          <p class="wm-muted">系统无法唯一确定应修改的数据，因此不会提供自动修复。请进入对应业务页面核对原始记录。</p>
+        </div>
+      </template>
+
+      <template #footer>
+        <el-button v-if="!executingRepair" @click="repairDialogVisible = false">关闭</el-button>
+        <el-button
+          v-if="repairPreview?.repairable && !repairResult"
+          type="danger"
+          :loading="executingRepair"
+          :disabled="executingRepair"
+          @click="executeRepair"
+        >
+          备份并修复
+        </el-button>
+        <el-button v-if="!repairPreview?.repairable && repairNavigationTarget" type="primary" @click="goToRepairTarget">
+          {{ repairNavigationTarget.label }}
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <section id="accounting-controls" class="wm-panel">
       <div class="wm-panel-body">
         <div class="wm-section-title">月结锁定与调账</div>
         <el-form inline label-width="80px" class="wm-compact-form">
@@ -174,7 +283,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { accountingApi, readingApi, settingsApi } from '@/api'
 import {
@@ -183,7 +293,14 @@ import {
   healthSeverityLabel,
   healthTypeLabel
 } from '@/utils/accountingHealthDisplay'
+import {
+  affectedRecordText,
+  repairChangeRows,
+  repairNavigation
+} from '@/utils/accountingRepairDisplay'
 import { formatLocalMonth, formatLocalTimestamp } from '@/utils/localDate'
+
+const router = useRouter()
 
 const waterPrice = ref(1.8)
 const threshold = ref(100)
@@ -194,6 +311,13 @@ const checkingUpdate = ref(false)
 const checkingHealth = ref(false)
 const healthChecked = ref(false)
 const healthIssues = ref([])
+const previewingIssueKey = ref('')
+const selectedHealthIssue = ref(null)
+const repairPreview = ref(null)
+const repairDialogVisible = ref(false)
+const executingRepair = ref(false)
+const repairResult = ref(null)
+const repairForm = ref({ operator: '管理员', reason: '' })
 const dbFilePath = ref('加载中...')
 const lanAccessEnabled = ref(false)
 const monthLockValue = ref(formatLocalMonth())
@@ -211,6 +335,8 @@ const adjustmentForm = ref({
   operator: '管理员'
 })
 const isTauriEnv = typeof window !== 'undefined' && !!window.__TAURI__
+const repairChanges = computed(() => repairChangeRows(repairPreview.value?.before, repairPreview.value?.after))
+const repairNavigationTarget = computed(() => repairNavigation(repairPreview.value?.issueType || selectedHealthIssue.value?.type))
 
 async function saveConfig() {
   savingConfig.value = true
@@ -317,6 +443,70 @@ async function runHealthCheck() {
   } finally {
     checkingHealth.value = false
   }
+}
+
+function healthIssueKey(issue = {}) {
+  return `${issue.type || ''}-${issue.refType || ''}-${issue.refId ?? ''}`
+}
+
+async function openRepairPreview(issue) {
+  const key = healthIssueKey(issue)
+  previewingIssueKey.value = key
+  try {
+    const preview = await accountingApi.repairPreview({
+      issueType: issue.type,
+      refType: issue.refType,
+      refId: issue.refId
+    })
+    selectedHealthIssue.value = issue
+    repairPreview.value = preview
+    repairResult.value = null
+    repairForm.value = { operator: '管理员', reason: '' }
+    repairDialogVisible.value = true
+  } catch (error) {
+    console.warn('加载账务处理方式失败', error)
+    ElMessage.error('无法查看处理方式：' + (error?.message || '请稍后重试'))
+  } finally {
+    if (previewingIssueKey.value === key) previewingIssueKey.value = ''
+  }
+}
+
+async function executeRepair() {
+  const operator = repairForm.value.operator?.trim()
+  const reason = repairForm.value.reason?.trim()
+  if (!operator || !reason) {
+    ElMessage.warning('请填写操作人和修复原因')
+    return
+  }
+  if (executingRepair.value) return
+
+  executingRepair.value = true
+  try {
+    repairResult.value = await accountingApi.repairExecute({
+      issueType: repairPreview.value.issueType,
+      refType: repairPreview.value.refType,
+      refId: repairPreview.value.refId,
+      operator,
+      reason
+    })
+    ElMessage.success('账务修复完成，已重新检查')
+    await runHealthCheck()
+  } catch (error) {
+    console.warn('账务修复失败', error)
+    ElMessage.error('修复失败：' + (error?.message || '数据可能已变化，请重新检查'))
+  } finally {
+    executingRepair.value = false
+  }
+}
+
+function closeRepairDialog(done) {
+  if (!executingRepair.value) done()
+}
+
+function goToRepairTarget() {
+  if (!repairNavigationTarget.value) return
+  repairDialogVisible.value = false
+  router.push(repairNavigationTarget.value.path)
 }
 
 async function loadAccountingControls() {
@@ -428,5 +618,49 @@ onMounted(async () => {
 }
 .wm-compact-form {
   margin-bottom: 12px;
+}
+
+.wm-repair-content,
+.wm-repair-manual {
+  margin-top: 18px;
+}
+
+.wm-repair-section {
+  margin-bottom: 18px;
+}
+
+.wm-repair-heading {
+  margin-bottom: 8px;
+  color: var(--wm-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.wm-repair-records {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--wm-text-secondary);
+  line-height: 1.8;
+}
+
+.wm-repair-form {
+  margin-top: 18px;
+}
+
+.wm-repair-result-details {
+  width: 420px;
+  max-width: 100%;
+  text-align: left;
+}
+
+.wm-repair-manual p {
+  margin: 0 0 10px;
+  line-height: 1.7;
+}
+
+@media (max-width: 768px) {
+  :global(.wm-repair-dialog) {
+    width: calc(100% - 24px) !important;
+  }
 }
 </style>

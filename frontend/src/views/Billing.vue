@@ -64,7 +64,14 @@
           @row-dblclick="startPayFromBill"
         >
           <el-table-column prop="villageName" label="村组" width="110" resizable show-overflow-tooltip />
-          <el-table-column prop="householdName" label="户主" width="100" resizable />
+          <el-table-column prop="householdName" label="户主" width="140" resizable>
+            <template #default="{ row }">
+              <span>{{ row.householdName }}</span>
+              <el-tag v-if="inactiveHouseholdLabel(row.householdActive)" type="info" size="small" class="wm-inactive-household-tag">
+                {{ inactiveHouseholdLabel(row.householdActive) }}
+              </el-tag>
+            </template>
+          </el-table-column>
           <el-table-column prop="waterMeterId" label="表号" width="130" resizable show-overflow-tooltip />
           <el-table-column label="账单月份" width="110" resizable>
             <template #default="{ row }">{{ row.billYear }}年{{ row.billMonth }}月</template>
@@ -227,6 +234,7 @@ import { ref, reactive, computed, nextTick, onBeforeUnmount, onMounted } from 'v
 import { ElMessage, ElNotification } from 'element-plus'
 import { householdApi, paymentApi } from '@/api'
 import { formatLocalDate } from '@/utils/localDate'
+import { inactiveHouseholdLabel } from '@/utils/pendingBillDisplay'
 
 const households = ref([])
 const allVillages = ref([])
@@ -440,6 +448,11 @@ async function openHistory() {
 
 .wm-billing-list-table {
   width: 100%;
+}
+
+.wm-inactive-household-tag {
+  margin-left: 6px;
+  vertical-align: middle;
 }
 
 @media (max-width: 1024px) {
