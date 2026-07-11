@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 
 import {
   applyReadingSaveResult,
@@ -7,6 +8,21 @@ import {
   summarizeHouseholdRemovals
 } from '../src/utils/readingSave.js'
 import { createEditableSnapshot, isRowDirty } from '../src/utils/dirtyRows.js'
+
+function extractFunctionBody(source, functionName) {
+  const signature = `async function ${functionName}()`
+  const signatureIndex = source.indexOf(signature)
+  assert.notEqual(signatureIndex, -1, `未找到 ${functionName} 函数`)
+
+  const bodyStart = source.indexOf('{', signatureIndex + signature.length)
+  let depth = 0
+  for (let index = bodyStart; index < source.length; index++) {
+    if (source[index] === '{') depth++
+    if (source[index] === '}') depth--
+    if (depth === 0) return source.slice(bodyStart + 1, index)
+  }
+  assert.fail(`${functionName} 函数体括号不完整`)
+}
 
 function row(values) {
   const result = {
@@ -75,4 +91,13 @@ test('住户处理结果汇总物理删除、停用和欠费金额', () => {
     outstandingAmount: 16,
     message: '已永久删除 1 户，停用并保留历史 2 户；停用户仍有欠费 16.00 元'
   })
+})
+
+test('页面保存入口不依赖村组或勾选住户，并统一构建脏行保存项', () => {
+  const source = readFileSync(new URL('../src/views/Readings.vue', import.meta.url), 'utf8')
+  const body = extractFunctionBody(source, 'batchSave')
+
+  assert.doesNotMatch(body, /\bselectedVillage\b/)
+  assert.doesNotMatch(body, /\bselectedHouseholdIds\b/)
+  assert.match(body, /\bbuildReadingSaveItems\s*\(/)
 })
