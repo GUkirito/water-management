@@ -1,9 +1,12 @@
 package com.example.watermanagement.service;
 
 import com.example.watermanagement.dto.VillageCollectionSummaryRow;
+import com.example.watermanagement.controller.HouseholdController;
 import com.example.watermanagement.entity.Household;
 import com.example.watermanagement.entity.MaterialPayment;
 import com.example.watermanagement.entity.MaterialRecord;
+import com.example.watermanagement.entity.Payment;
+import com.example.watermanagement.entity.PrepaymentLog;
 import com.example.watermanagement.entity.Reading;
 import com.example.watermanagement.entity.WaterBill;
 import com.example.watermanagement.exception.BusinessException;
@@ -26,6 +29,8 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -36,6 +41,7 @@ class ReportingAndDeletionTests {
 
     @Autowired private ReportService reportService;
     @Autowired private HouseholdService householdService;
+    @Autowired private HouseholdController householdController;
     @Autowired private MaterialRecordService materialRecordService;
     @Autowired private HouseholdRepository householdRepository;
     @Autowired private ReadingRepository readingRepository;
@@ -86,7 +92,7 @@ class ReportingAndDeletionTests {
     }
 
     @Test
-    void householdWithFinancialHistoryIsArchivedInsteadOfDeleted() {
+    void householdWithBusinessHistoryIsDeactivatedAndReturnsPreservedHistoryCounts() {
         Household household = household("M-HISTORY", true);
         readingRepository.save(Reading.builder()
                 .waterMeterId("M-HISTORY")
@@ -96,21 +102,186 @@ class ReportingAndDeletionTests {
                 .usageAmount(BigDecimal.TEN)
                 .isAbnormal(false)
                 .build());
+        WaterBill bill = waterBillRepository.save(WaterBill.builder()
+                .waterMeterId("M-HISTORY")
+                .billYear(2026)
+                .billMonth(7)
+                .waterAmount(new BigDecimal("3.00"))
+                .waterCharge(new BigDecimal("5.40"))
+                .actualWaterPaid(new BigDecimal("1.40"))
+                .waterStatus("部分收")
+                .build());
+        paymentRepository.save(Payment.builder()
+                .billType("water")
+                .billId(bill.getId())
+                .amount(new BigDecimal("1.40"))
+                .paidDate(LocalDate.of(2026, 7, 2))
+                .build());
+        paymentRepository.save(Payment.builder()
+                .billType("material")
+                .billId(bill.getId())
+                .amount(new BigDecimal("100.00"))
+                .paidDate(LocalDate.of(2026, 7, 2))
+                .build());
+        prepaymentLogRepository.save(PrepaymentLog.builder()
+                .waterMeterId("M-HISTORY")
+                .amount(new BigDecimal("2.00"))
+                .type("OVERPAYMENT")
+                .build());
+        MaterialRecord materialRecord = materialRecordRepository.save(MaterialRecord.builder()
+                .householdName("测试户")
+                .waterMeterId("M-HISTORY")
+                .villageName("测试村")
+                .totalFee(new BigDecimal("1500.00"))
+                .actualPaid(new BigDecimal("100.00"))
+                .status("部分收")
+                .build());
+        materialPaymentRepository.save(MaterialPayment.builder()
+                .recordId(materialRecord.getId())
+                .amount(new BigDecimal("100.00"))
+                .paidDate(LocalDate.of(2026, 7, 2))
+                .collector("tester")
+                .build());
 
-        householdService.delete(household.getId());
+        var result = householdService.delete(household.getId());
 
         Household archived = householdRepository.findById(household.getId()).orElseThrow();
         assertThat(archived.getIsActive()).isFalse();
+        assertThat(result.getAction()).isEqualTo("DEACTIVATED");
+        assertThat(result.getHouseholdId()).isEqualTo(household.getId());
+        assertThat(result.getWaterMeterId()).isEqualTo("M-HISTORY");
+        assertThat(result.getReadingCount()).isEqualTo(1);
+        assertThat(result.getBillCount()).isEqualTo(1);
+        assertThat(result.getPaymentCount()).isEqualTo(1);
+        assertThat(result.getPrepaymentCount()).isEqualTo(1);
+        assertThat(result.getMaterialRecordCount()).isEqualTo(1);
+        assertThat(result.getMaterialPaymentCount()).isEqualTo(1);
+        assertThat(result.getOutstandingAmount()).isEqualByComparingTo("4.00");
         assertThat(readingRepository.findAll()).hasSize(1);
+        assertThat(waterBillRepository.findAll()).hasSize(1);
+        assertThat(paymentRepository.findAll()).hasSize(2);
+        assertThat(prepaymentLogRepository.findAll()).hasSize(1);
+        assertThat(materialRecordRepository.findAll()).hasSize(1);
+        assertThat(materialPaymentRepository.findAll()).hasSize(1);
     }
 
     @Test
     void householdWithoutHistoryIsPhysicallyDeleted() {
         Household household = household("M-EMPTY", true);
 
-        householdService.delete(household.getId());
+        var result = householdService.delete(household.getId());
 
         assertThat(householdRepository.findById(household.getId())).isEmpty();
+        assertThat(result.getAction()).isEqualTo("DELETED");
+        assertThat(result.getHouseholdId()).isEqualTo(household.getId());
+        assertThat(result.getWaterMeterId()).isEqualTo("M-EMPTY");
+        assertThat(result.getReadingCount()).isZero();
+        assertThat(result.getBillCount()).isZero();
+        assertThat(result.getPaymentCount()).isZero();
+        assertThat(result.getPrepaymentCount()).isZero();
+        assertThat(result.getMaterialRecordCount()).isZero();
+        assertThat(result.getMaterialPaymentCount()).isZero();
+        assertThat(result.getOutstandingAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    void householdControllerReturnsSingleAndBatchRemovalResults() {
+        Household single = household("M-CONTROLLER-SINGLE", true);
+
+        var singleResponse = householdController.delete(single.getId(), true);
+
+        assertThat(singleResponse.getData().getAction()).isEqualTo("DELETED");
+        assertThat(singleResponse.getData().getHouseholdId()).isEqualTo(single.getId());
+
+        Household first = household("M-CONTROLLER-BATCH-1", true);
+        Household second = household("M-CONTROLLER-BATCH-2", true);
+
+        var batchResponse = householdController.batchDelete(Map.of(
+                "ids", List.of(first.getId(), second.getId()),
+                "confirm", true));
+
+        assertThat(batchResponse.getData())
+                .extracting(result -> result.getHouseholdId())
+                .containsExactly(first.getId(), second.getId());
+        assertThat(batchResponse.getData())
+                .extracting(result -> result.getAction())
+                .containsOnly("DELETED");
+    }
+
+    @Test
+    void batchDeleteDeduplicatesIdsInFirstSeenOrderAndPreservesHistory() {
+        Household empty = household("M-BATCH-EMPTY", true);
+        Household withHistory = household("M-BATCH-HISTORY", true);
+        readingRepository.save(Reading.builder()
+                .waterMeterId("M-BATCH-HISTORY")
+                .readingDate(LocalDate.of(2026, 7, 1))
+                .previousReading(BigDecimal.ZERO)
+                .currentReading(BigDecimal.TEN)
+                .usageAmount(BigDecimal.TEN)
+                .isAbnormal(false)
+                .build());
+
+        var results = householdService.batchDelete(List.of(
+                empty.getId(), withHistory.getId(), empty.getId(), withHistory.getId()));
+
+        assertThat(results)
+                .extracting(result -> result.getHouseholdId())
+                .containsExactly(empty.getId(), withHistory.getId());
+        assertThat(results)
+                .extracting(result -> result.getAction())
+                .containsExactly("DELETED", "DEACTIVATED");
+        assertThat(householdRepository.findById(empty.getId())).isEmpty();
+        assertThat(householdRepository.findById(withHistory.getId()).orElseThrow().getIsActive()).isFalse();
+        assertThat(readingRepository.findByWaterMeterIdInOrderByReadingDateDesc(
+                List.of("M-BATCH-HISTORY"))).hasSize(1);
+    }
+
+    @Test
+    void batchDeleteRollsBackAllChangesWhenAnyHouseholdDoesNotExist() {
+        Household empty = household("M-BATCH-ROLLBACK-EMPTY", true);
+        Household withHistory = household("M-BATCH-ROLLBACK-HISTORY", true);
+        readingRepository.save(Reading.builder()
+                .waterMeterId("M-BATCH-ROLLBACK-HISTORY")
+                .readingDate(LocalDate.of(2026, 7, 1))
+                .previousReading(BigDecimal.ZERO)
+                .currentReading(BigDecimal.ONE)
+                .usageAmount(BigDecimal.ONE)
+                .isAbnormal(false)
+                .build());
+
+        assertThatThrownBy(() -> householdService.batchDelete(List.of(
+                empty.getId(), withHistory.getId(), Long.MAX_VALUE)))
+                .isInstanceOf(BusinessException.class);
+
+        assertThat(householdRepository.findById(empty.getId()).orElseThrow().getIsActive()).isTrue();
+        assertThat(householdRepository.findById(withHistory.getId()).orElseThrow().getIsActive()).isTrue();
+        assertThat(readingRepository.findByWaterMeterIdInOrderByReadingDateDesc(
+                List.of("M-BATCH-ROLLBACK-HISTORY"))).hasSize(1);
+    }
+
+    @Test
+    void deletingInactiveHouseholdWithHistoryAgainIsIdempotent() {
+        Household household = household("M-INACTIVE-DELETE", false);
+        Reading reading = readingRepository.save(Reading.builder()
+                .waterMeterId("M-INACTIVE-DELETE")
+                .readingDate(LocalDate.of(2026, 7, 1))
+                .previousReading(BigDecimal.ZERO)
+                .currentReading(BigDecimal.ONE)
+                .usageAmount(BigDecimal.ONE)
+                .isAbnormal(false)
+                .build());
+
+        var result = householdService.delete(household.getId());
+
+        assertThat(result.getAction()).isEqualTo("DEACTIVATED");
+        assertThat(result.getReadingCount()).isEqualTo(1);
+        assertThat(householdRepository.findById(household.getId()).orElseThrow().getIsActive()).isFalse();
+        assertThat(readingRepository.findById(reading.getId())).isPresent();
+    }
+
+    @Test
+    void deleteByVillageReturnsEmptyListWhenNoActiveHouseholdsMatch() {
+        assertThat(householdService.deleteByVillage("不存在村组")).isEmpty();
     }
 
     @Test

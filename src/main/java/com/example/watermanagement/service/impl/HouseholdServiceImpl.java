@@ -2,7 +2,10 @@ package com.example.watermanagement.service.impl;
 
 import com.example.watermanagement.dto.HouseholdExportRow;
 import com.example.watermanagement.dto.HouseholdRequest;
+import com.example.watermanagement.dto.HouseholdRemovalResult;
 import com.example.watermanagement.entity.Household;
+import com.example.watermanagement.entity.MaterialRecord;
+import com.example.watermanagement.entity.WaterBill;
 import com.example.watermanagement.exception.BusinessException;
 import com.example.watermanagement.repository.HouseholdRepository;
 import com.example.watermanagement.repository.MaterialPaymentRepository;
@@ -114,21 +117,58 @@ public class HouseholdServiceImpl implements HouseholdService {
 
     @Override
     @Transactional
-    public void delete(Long id) {
+    public HouseholdRemovalResult delete(Long id) {
         Household household = getById(id);
         String meterId = household.getWaterMeterId();
-        boolean hasHistory = !readingRepository.findByWaterMeterIdInOrderByReadingDateDesc(List.of(meterId)).isEmpty()
-                || !waterBillRepository.findByWaterMeterId(meterId).isEmpty()
-                || !prepaymentLogRepository.findByWaterMeterIdOrderByCreatedAtDesc(meterId).isEmpty()
-                || materialRecordRepository.findByWaterMeterId(meterId).isPresent();
+        long readingCount = readingRepository.findByWaterMeterIdInOrderByReadingDateDesc(List.of(meterId)).size();
+        List<WaterBill> waterBills = waterBillRepository.findByWaterMeterId(meterId);
+        List<Long> waterBillIds = waterBills.stream().map(WaterBill::getId).toList();
+        long paymentCount = waterBillIds.isEmpty()
+                ? 0
+                : paymentRepository.findByBillTypeAndBillIdIn("water", waterBillIds).size();
+        long prepaymentCount = prepaymentLogRepository.findByWaterMeterIdOrderByCreatedAtDesc(meterId).size();
+        Optional<MaterialRecord> materialRecord = materialRecordRepository.findByWaterMeterId(meterId);
+        long materialPaymentCount = materialRecord
+                .map(record -> (long) materialPaymentRepository
+                        .findByRecordIdOrderByPaidDateDesc(record.getId()).size())
+                .orElse(0L);
+        BigDecimal outstandingAmount = waterBills.stream()
+                .map(this::calculateOutstandingAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        HouseholdRemovalResult result = HouseholdRemovalResult.builder()
+                .householdId(id)
+                .waterMeterId(meterId)
+                .readingCount(readingCount)
+                .billCount(waterBills.size())
+                .paymentCount(paymentCount)
+                .prepaymentCount(prepaymentCount)
+                .materialRecordCount(materialRecord.isPresent() ? 1 : 0)
+                .materialPaymentCount(materialPaymentCount)
+                .outstandingAmount(outstandingAmount)
+                .build();
+        boolean hasHistory = readingCount > 0
+                || !waterBills.isEmpty()
+                || paymentCount > 0
+                || prepaymentCount > 0
+                || materialRecord.isPresent()
+                || materialPaymentCount > 0;
         if (hasHistory) {
             household.setIsActive(false);
             householdRepository.save(household);
+            result.setAction("DEACTIVATED");
             log.info("停用存在历史数据的村民: {} [水表: {}]", household.getHouseholdName(), meterId);
-            return;
+            return result;
         }
         householdRepository.delete(household);
+        result.setAction("DELETED");
         log.info("物理删除村民: {} [水表: {}]", household.getHouseholdName(), meterId);
+        return result;
+    }
+
+    private BigDecimal calculateOutstandingAmount(WaterBill bill) {
+        BigDecimal charge = bill.getWaterCharge() == null ? BigDecimal.ZERO : bill.getWaterCharge();
+        BigDecimal paid = bill.getActualWaterPaid() == null ? BigDecimal.ZERO : bill.getActualWaterPaid();
+        return charge.subtract(paid).max(BigDecimal.ZERO);
     }
 
     private void syncWaterMeterId(String oldMeterId, String newMeterId) {
@@ -161,17 +201,19 @@ public class HouseholdServiceImpl implements HouseholdService {
 
     @Override
     @Transactional
-    public void batchDelete(List<Long> ids) {
-        for (Long id : ids) { delete(id); }
-        log.info("批量删除或停用村民: {} 户", ids.size());
+    public List<HouseholdRemovalResult> batchDelete(List<Long> ids) {
+        List<HouseholdRemovalResult> results = ids.stream().distinct().map(this::delete).toList();
+        log.info("批量删除或停用村民: {} 户", results.size());
+        return results;
     }
 
     @Override
     @Transactional
-    public void deleteByVillage(String villageName) {
+    public List<HouseholdRemovalResult> deleteByVillage(String villageName) {
         List<Household> list = householdRepository.findByVillageNameInAndIsActiveTrue(List.of(villageName));
-        for (Household h : list) { delete(h.getId()); }
+        List<HouseholdRemovalResult> results = list.stream().map(h -> delete(h.getId())).toList();
         log.info("按村删除或停用: {} [{}户]", villageName, list.size());
+        return results;
     }
 
     @Override

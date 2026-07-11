@@ -2,6 +2,7 @@ package com.example.watermanagement.controller;
 
 import com.example.watermanagement.dto.ApiResponse;
 import com.example.watermanagement.dto.HouseholdRequest;
+import com.example.watermanagement.dto.HouseholdRemovalResult;
 import com.example.watermanagement.entity.Household;
 import com.example.watermanagement.exception.BusinessException;
 import com.example.watermanagement.service.HouseholdService;
@@ -67,19 +68,18 @@ public class HouseholdController {
 
     @Operation(summary = "删除或停用住户", description = "无历史数据时物理删除，存在抄表或账务历史时停用归档")
     @DeleteMapping("/delete/{id}")
-    public ApiResponse<Void> delete(
+    public ApiResponse<HouseholdRemovalResult> delete(
             @Parameter(description = "村民ID") @PathVariable Long id,
             @RequestParam(defaultValue = "false") boolean confirm) {
         if (!confirm) {
             throw new BusinessException("危险操作：删除或停用住户需添加参数 ?confirm=true");
         }
-        householdService.delete(id);
-        return ApiResponse.ok("删除或停用完成", null);
+        return ApiResponse.ok("删除或停用完成", householdService.delete(id));
     }
 
     @Operation(summary = "批量删除村民")
     @PostMapping("/batch-delete")
-    public ApiResponse<Void> batchDelete(@RequestBody Map<String, Object> body) {
+    public ApiResponse<List<HouseholdRemovalResult>> batchDelete(@RequestBody Map<String, Object> body) {
         if (!(body.get("ids") instanceof List<?> rawIds) || rawIds.isEmpty()) {
             return ApiResponse.fail("参数 ids 不能为空");
         }
@@ -92,20 +92,18 @@ public class HouseholdController {
             }
             return number.longValue();
         }).toList();
-        householdService.batchDelete(ids);
-        return ApiResponse.ok("批量删除或停用完成", null);
+        return ApiResponse.ok("批量删除或停用完成", householdService.batchDelete(ids));
     }
 
     @Operation(summary = "按村组删除或停用（需二次确认）", description = "无历史数据时删除，存在历史数据时停用归档")
     @DeleteMapping("/delete-by-village")
-    public ApiResponse<Void> deleteByVillage(
+    public ApiResponse<List<HouseholdRemovalResult>> deleteByVillage(
             @RequestParam String villageName,
             @RequestParam(defaultValue = "false") boolean confirm) {
         if (!confirm) {
             throw new BusinessException("危险操作：删除整个村组需添加参数 ?confirm=true");
         }
-        householdService.deleteByVillage(villageName);
-        return ApiResponse.ok("删除或停用完成", null);
+        return ApiResponse.ok("删除或停用完成", householdService.deleteByVillage(villageName));
     }
 
     @Operation(summary = "批量修改村民的村组名称")

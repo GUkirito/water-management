@@ -1,6 +1,7 @@
 package com.example.watermanagement.service;
 
 import com.example.watermanagement.dto.HouseholdRequest;
+import com.example.watermanagement.dto.HouseholdRemovalResult;
 import com.example.watermanagement.entity.Household;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -40,17 +41,17 @@ public interface HouseholdService {
     /**
      * 无历史数据时物理删除，存在抄表或账务历史时停用归档
      */
-    void delete(Long id);
+    HouseholdRemovalResult delete(Long id);
 
     /**
      * 批量删除或停用
      */
-    void batchDelete(List<Long> ids);
+    List<HouseholdRemovalResult> batchDelete(List<Long> ids);
 
     /**
      * 按村名删除或停用该村所有户
      */
-    void deleteByVillage(String villageName);
+    List<HouseholdRemovalResult> deleteByVillage(String villageName);
 
     /**
      * 批量修改村民的村组名称
