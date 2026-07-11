@@ -5,7 +5,7 @@ use std::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime},
 };
 
 use serde::{Deserialize, Serialize};
@@ -20,6 +20,8 @@ const VERIFYING: &str = "VERIFYING";
 const INSTALLING: &str = "INSTALLING";
 const PROGRESS_EVENT: &str = "wm-update-progress";
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(200);
+const STARTUP_FAILURE_COOLDOWN_SECONDS: u64 = 24 * 60 * 60;
+static UPDATE_PREFERENCE_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Default)]
 pub struct AppUpdateState {
@@ -163,6 +165,7 @@ pub enum UpdateCheckStatus {
     UpToDate,
     Available,
     Skipped,
+    Deferred,
 }
 
 #[derive(Serialize)]
@@ -180,6 +183,32 @@ pub struct UpdateCheckResult {
 #[serde(rename_all = "camelCase")]
 struct UpdatePreference {
     skipped_version: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_u64_lenient")]
+    startup_failure_retry_after_epoch_seconds: Option<u64>,
+}
+
+fn deserialize_optional_u64_lenient<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(value.as_u64())
+}
+
+fn current_epoch_seconds() -> u64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+fn should_defer_startup_check(
+    trigger: UpdateCheckTrigger,
+    retry_after_epoch_seconds: Option<u64>,
+    now_epoch_seconds: u64,
+) -> bool {
+    trigger == UpdateCheckTrigger::Startup
+        && retry_after_epoch_seconds.is_some_and(|retry_after| now_epoch_seconds < retry_after)
 }
 
 fn should_suppress_startup(skipped_version: Option<&str>, target_version: &str) -> bool {
@@ -199,32 +228,118 @@ fn preference_path(app_data_dir: &Path) -> std::path::PathBuf {
     app_data_dir.join("update-preference.json")
 }
 
-fn read_preference(app_data_dir: &Path) -> UpdatePreference {
+fn read_preference_strict(app_data_dir: &Path) -> Result<UpdatePreference, String> {
     let path = preference_path(app_data_dir);
-    match fs::read_to_string(&path)
-        .and_then(|content| serde_json::from_str(&content).map_err(std::io::Error::other))
-    {
-        Ok(preference) => preference,
+    let content = match fs::read(&path) {
+        Ok(content) => content,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(UpdatePreference::default());
+        }
         Err(error) => {
-            crate::log_desktop(format!(
+            return Err(format!(
                 "failed to read update preference {}: {error}",
                 path.display()
             ));
+        }
+    };
+    serde_json::from_slice(&content).map_err(|error| {
+        format!(
+            "failed to parse update preference {}: {error}",
+            path.display()
+        )
+    })
+}
+
+fn read_preference(app_data_dir: &Path) -> UpdatePreference {
+    let result = UPDATE_PREFERENCE_LOCK
+        .lock()
+        .map_err(|error| format!("update preference lock poisoned: {error}"))
+        .and_then(|_guard| read_preference_strict(app_data_dir));
+    match result {
+        Ok(preference) => preference,
+        Err(error) => {
+            crate::log_desktop(error);
             UpdatePreference::default()
         }
     }
 }
 
-fn write_preference(app_data_dir: &Path, version: &str) -> Result<(), String> {
-    fs::create_dir_all(app_data_dir).map_err(|error| error.to_string())?;
+fn write_preference_unlocked(
+    app_data_dir: &Path,
+    preference: &UpdatePreference,
+) -> Result<(), String> {
+    fs::create_dir_all(app_data_dir).map_err(|error| {
+        format!(
+            "failed to create update preference directory {}: {error}",
+            app_data_dir.display()
+        )
+    })?;
     let path = preference_path(app_data_dir);
     let temp_path = app_data_dir.join("update-preference.json.tmp");
-    let content = serde_json::to_vec_pretty(&UpdatePreference {
-        skipped_version: Some(version.to_string()),
+    let content = serde_json::to_vec_pretty(preference).map_err(|error| {
+        format!(
+            "failed to serialize update preference {}: {error}",
+            path.display()
+        )
+    })?;
+    fs::write(&temp_path, content).map_err(|error| {
+        format!(
+            "failed to write temporary update preference {}: {error}",
+            temp_path.display()
+        )
+    })?;
+    atomic_replace(&temp_path, &path).map_err(|error| {
+        format!(
+            "failed to replace update preference {}: {error}",
+            path.display()
+        )
     })
-    .map_err(|error| error.to_string())?;
-    fs::write(&temp_path, content).map_err(|error| error.to_string())?;
-    atomic_replace(&temp_path, &path).map_err(|error| error.to_string())
+}
+
+fn update_preference_transaction<F>(app_data_dir: &Path, update: F) -> Result<(), String>
+where
+    F: FnOnce(&mut UpdatePreference) -> bool,
+{
+    let _guard = UPDATE_PREFERENCE_LOCK
+        .lock()
+        .map_err(|error| format!("update preference lock poisoned: {error}"))?;
+    let mut preference = read_preference_strict(app_data_dir)?;
+    if !update(&mut preference) {
+        return Ok(());
+    }
+    write_preference_unlocked(app_data_dir, &preference)
+}
+
+fn mark_startup_failure(app_data_dir: &Path, now_epoch_seconds: u64) -> Result<(), String> {
+    update_preference_transaction(app_data_dir, |preference| {
+        preference.startup_failure_retry_after_epoch_seconds =
+            Some(now_epoch_seconds.saturating_add(STARTUP_FAILURE_COOLDOWN_SECONDS));
+        true
+    })
+}
+
+fn mark_startup_failure_now(app_data_dir: &Path) -> Result<(), String> {
+    mark_startup_failure(app_data_dir, current_epoch_seconds())
+}
+
+fn clear_startup_failure(app_data_dir: &Path) -> Result<(), String> {
+    update_preference_transaction(app_data_dir, |preference| {
+        preference
+            .startup_failure_retry_after_epoch_seconds
+            .take()
+            .is_some()
+    })
+}
+
+fn set_skipped_version(preference: &mut UpdatePreference, version: &str) {
+    preference.skipped_version = Some(version.to_string());
+}
+
+fn persist_skipped_version(app_data_dir: &Path, version: &str) -> Result<(), String> {
+    update_preference_transaction(app_data_dir, |preference| {
+        set_skipped_version(preference, version);
+        true
+    })
 }
 
 #[cfg(not(windows))]
@@ -283,14 +398,55 @@ pub async fn check_app_update(
         .app_data_dir()
         .map_err(|error| error.to_string())?;
     let preference = read_preference(&app_data_dir);
-    let updater = app.updater().map_err(|error| {
-        crate::log_desktop(format!("update check error: {error}"));
-        error.to_string()
-    })?;
-    let update = updater.check().await.map_err(|error| {
-        crate::log_desktop(format!("update check error: {error}"));
-        error.to_string()
-    })?;
+    let now_epoch_seconds = current_epoch_seconds();
+    if should_defer_startup_check(
+        trigger,
+        preference.startup_failure_retry_after_epoch_seconds,
+        now_epoch_seconds,
+    ) {
+        crate::log_desktop("startup update check deferred by cooldown".to_string());
+        return Ok(UpdateCheckResult {
+            status: UpdateCheckStatus::Deferred,
+            current_version,
+            target_version: None,
+            notes: None,
+            published_at: None,
+            was_skipped: false,
+        });
+    }
+    let updater = match app.updater() {
+        Ok(updater) => updater,
+        Err(error) => {
+            if trigger == UpdateCheckTrigger::Startup {
+                if let Err(preference_error) = mark_startup_failure_now(&app_data_dir) {
+                    crate::log_desktop(format!(
+                        "failed to persist startup update cooldown: {preference_error}"
+                    ));
+                }
+            }
+            crate::log_desktop(format!("update check error: {error}"));
+            return Err(error.to_string());
+        }
+    };
+    let update = match updater.check().await {
+        Ok(update) => update,
+        Err(error) => {
+            if trigger == UpdateCheckTrigger::Startup {
+                if let Err(preference_error) = mark_startup_failure_now(&app_data_dir) {
+                    crate::log_desktop(format!(
+                        "failed to persist startup update cooldown: {preference_error}"
+                    ));
+                }
+            }
+            crate::log_desktop(format!("update check error: {error}"));
+            return Err(error.to_string());
+        }
+    };
+    if let Err(preference_error) = clear_startup_failure(&app_data_dir) {
+        crate::log_desktop(format!(
+            "failed to clear startup update cooldown: {preference_error}"
+        ));
+    }
 
     let Some(update) = update else {
         crate::log_desktop(format!(
@@ -345,7 +501,10 @@ pub fn skip_app_update(version: String, app: tauri::AppHandle) -> Result<(), Str
         .path()
         .app_data_dir()
         .map_err(|error| error.to_string())?;
-    write_preference(&app_data_dir, version)
+    persist_skipped_version(&app_data_dir, version).map_err(|error| {
+        crate::log_desktop(format!("failed to persist skipped update version: {error}"));
+        error
+    })
 }
 
 #[tauri::command]
@@ -512,6 +671,8 @@ mod tests {
     use std::{
         fs,
         path::PathBuf,
+        sync::{Arc, Barrier},
+        thread,
         time::{Duration, SystemTime},
     };
 
@@ -544,13 +705,202 @@ mod tests {
     #[test]
     fn preference_round_trip_replaces_previous_version() {
         let root = fixture_root("update-preference");
-        write_preference(&root, "1.7.7").unwrap();
-        write_preference(&root, "1.7.8").unwrap();
+        update_preference_transaction(&root, |preference| {
+            *preference = UpdatePreference {
+                skipped_version: Some("1.7.7".to_string()),
+                startup_failure_retry_after_epoch_seconds: None,
+            };
+            true
+        })
+        .unwrap();
+        update_preference_transaction(&root, |preference| {
+            *preference = UpdatePreference {
+                skipped_version: Some("1.7.8".to_string()),
+                startup_failure_retry_after_epoch_seconds: Some(123_456),
+            };
+            true
+        })
+        .unwrap();
+        let preference = read_preference(&root);
+        assert_eq!(preference.skipped_version.as_deref(), Some("1.7.8"));
         assert_eq!(
-            read_preference(&root).skipped_version.as_deref(),
-            Some("1.7.8")
+            preference.startup_failure_retry_after_epoch_seconds,
+            Some(123_456)
         );
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn legacy_preference_without_cooldown_is_readable() {
+        let root = fixture_root("legacy-update-preference");
+        fs::write(preference_path(&root), r#"{"skippedVersion":"1.7.7"}"#).unwrap();
+
+        let preference = read_preference(&root);
+
+        assert_eq!(preference.skipped_version.as_deref(), Some("1.7.7"));
+        assert_eq!(preference.startup_failure_retry_after_epoch_seconds, None);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn invalid_startup_failure_cooldown_does_not_discard_skipped_version() {
+        for (name, cooldown) in [
+            ("string", r#""invalid""#),
+            ("negative", "-1"),
+            ("null", "null"),
+            ("above-u64-max", "18446744073709551616"),
+            ("overflowing-exponent", "1e400"),
+        ] {
+            let root = fixture_root(&format!("invalid-update-cooldown-{name}"));
+            fs::write(
+                preference_path(&root),
+                format!(
+                    r#"{{"skippedVersion":"1.7.8","startupFailureRetryAfterEpochSeconds":{cooldown}}}"#
+                ),
+            )
+            .unwrap();
+
+            let preference = read_preference(&root);
+
+            assert_eq!(preference.skipped_version.as_deref(), Some("1.7.8"));
+            assert_eq!(preference.startup_failure_retry_after_epoch_seconds, None);
+            fs::remove_dir_all(root).unwrap();
+        }
+    }
+
+    #[test]
+    fn startup_check_defers_only_before_retry_deadline() {
+        assert!(should_defer_startup_check(
+            UpdateCheckTrigger::Startup,
+            Some(1_000),
+            999
+        ));
+        assert!(!should_defer_startup_check(
+            UpdateCheckTrigger::Startup,
+            Some(1_000),
+            1_000
+        ));
+        assert!(!should_defer_startup_check(
+            UpdateCheckTrigger::Startup,
+            None,
+            999
+        ));
+    }
+
+    #[test]
+    fn manual_check_never_defers_for_startup_failure() {
+        assert!(!should_defer_startup_check(
+            UpdateCheckTrigger::Manual,
+            Some(u64::MAX),
+            0
+        ));
+    }
+
+    #[test]
+    fn marking_and_clearing_startup_failure_preserves_skipped_version() {
+        let root = fixture_root("update-cooldown");
+        persist_skipped_version(&root, "1.7.7").unwrap();
+
+        mark_startup_failure(&root, 1_000).unwrap();
+        let marked = read_preference(&root);
+        assert_eq!(marked.skipped_version.as_deref(), Some("1.7.7"));
+        assert_eq!(
+            marked.startup_failure_retry_after_epoch_seconds,
+            Some(1_000 + STARTUP_FAILURE_COOLDOWN_SECONDS)
+        );
+
+        clear_startup_failure(&root).unwrap();
+        let cleared = read_preference(&root);
+        assert_eq!(cleared.skipped_version.as_deref(), Some("1.7.7"));
+        assert_eq!(cleared.startup_failure_retry_after_epoch_seconds, None);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn setting_skipped_version_preserves_startup_failure_cooldown() {
+        let mut preference = UpdatePreference {
+            skipped_version: Some("1.7.7".to_string()),
+            startup_failure_retry_after_epoch_seconds: Some(123_456),
+        };
+
+        set_skipped_version(&mut preference, "1.7.8");
+
+        assert_eq!(preference.skipped_version.as_deref(), Some("1.7.8"));
+        assert_eq!(
+            preference.startup_failure_retry_after_epoch_seconds,
+            Some(123_456)
+        );
+    }
+
+    #[test]
+    fn clearing_corrupt_preference_returns_error_without_overwriting_file() {
+        let root = fixture_root("corrupt-update-preference");
+        let path = preference_path(&root);
+        let original = b"{not-valid-json";
+        fs::write(&path, original).unwrap();
+
+        assert!(clear_startup_failure(&root).is_err());
+        assert_eq!(fs::read(&path).unwrap(), original);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn concurrent_skip_and_failure_mark_preserve_both_fields() {
+        let root = fixture_root("concurrent-update-preference");
+
+        for round in 0..32 {
+            let round_root = root.join(round.to_string());
+            fs::create_dir_all(&round_root).unwrap();
+            let barrier = Arc::new(Barrier::new(2));
+            let skip_root = round_root.clone();
+            let skip_barrier = Arc::clone(&barrier);
+            let skip = thread::spawn(move || {
+                skip_barrier.wait();
+                persist_skipped_version(&skip_root, "1.7.7")
+            });
+            let mark_root = round_root.clone();
+            let mark_barrier = Arc::clone(&barrier);
+            let mark = thread::spawn(move || {
+                mark_barrier.wait();
+                mark_startup_failure(&mark_root, 1_000 + round)
+            });
+
+            skip.join().unwrap().unwrap();
+            mark.join().unwrap().unwrap();
+            let preference = read_preference(&round_root);
+            assert_eq!(preference.skipped_version.as_deref(), Some("1.7.7"));
+            assert_eq!(
+                preference.startup_failure_retry_after_epoch_seconds,
+                Some(1_000 + round + STARTUP_FAILURE_COOLDOWN_SECONDS)
+            );
+        }
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn clearing_absent_cooldown_does_not_create_or_rewrite_preference() {
+        let empty_root = fixture_root("clear-empty-update-preference");
+        clear_startup_failure(&empty_root).unwrap();
+        assert!(!preference_path(&empty_root).exists());
+
+        let existing_root = fixture_root("clear-existing-update-preference");
+        let path = preference_path(&existing_root);
+        let original = br#"{ "skippedVersion": "1.7.7" }"#;
+        fs::write(&path, original).unwrap();
+        clear_startup_failure(&existing_root).unwrap();
+        assert_eq!(fs::read(&path).unwrap(), original);
+
+        fs::remove_dir_all(empty_root).unwrap();
+        fs::remove_dir_all(existing_root).unwrap();
+    }
+
+    #[test]
+    fn deferred_status_serializes_as_screaming_snake_case() {
+        assert_eq!(
+            serde_json::to_string(&UpdateCheckStatus::Deferred).unwrap(),
+            r#""DEFERRED""#
+        );
     }
 
     #[test]
