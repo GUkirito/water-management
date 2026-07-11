@@ -223,7 +223,10 @@ fn restore_database(
     state: tauri::State<'_, BackendState>,
 ) -> Result<RestoreResult, String> {
     let home = user_home().ok_or_else(|| "无法确定用户数据目录".to_string())?;
-    let staging_root = home.join(".water-management").join("data").join("restore-staging");
+    let staging_root = home
+        .join(".water-management")
+        .join("data")
+        .join("restore-staging");
     let data_root = home.join(".water-management").join("data");
     let database = data_root.join("water_meter.db");
     let files = resolve_restore_files(&staging_root, &token).map_err(|error| error.to_string())?;
