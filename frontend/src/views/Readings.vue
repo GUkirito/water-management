@@ -912,6 +912,7 @@ async function exportTemplate() {
   }
 }
 
+// reading-save:start
 async function batchSave() {
   const changedRows = dirtyRows(tableData.value)
   const items = buildReadingSaveItems(tableData.value)
@@ -919,13 +920,17 @@ async function batchSave() {
     ElMessage.warning(changedRows.length ? '修改行需要填写有效表底' : '没有需要保存的修改')
     return
   }
+  const submittedSnapshots = new Map(items.map(item => {
+    const row = tableData.value.find(candidate => candidate.waterMeterId === item.waterMeterId)
+    return [item.waterMeterId, createEditableSnapshot(row)]
+  }))
   saving.value = true
   try {
     const r = await readingApi.batchSave(items, readingDate.value)
     const savedCount = r?.total ?? 0
     const abnormalCount = r?.abnormal ?? 0
     const failedCount = r?.fail ?? 0
-    applyReadingSaveResult(tableData.value, r)
+    applyReadingSaveResult(tableData.value, r, submittedSnapshots)
     const failedDetails = (r?.details || []).filter(detail => detail.status === 'fail')
     ElNotification({
       title: failedCount ? (savedCount ? '部分保存失败' : '保存失败') : '保存成功',
@@ -954,6 +959,7 @@ async function batchSave() {
     saving.value = false
   }
 }
+// reading-save:end
 
 async function exportHistoryTemplate() {
   const params = {}

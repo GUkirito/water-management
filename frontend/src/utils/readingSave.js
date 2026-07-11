@@ -1,4 +1,4 @@
-import { createEditableSnapshot, dirtyRows } from './dirtyRows.js'
+import { dirtyRows } from './dirtyRows.js'
 
 export function hasValidCurrentReading(row) {
   if (row.currentReading === null || row.currentReading === undefined || row.currentReading === '') return false
@@ -24,14 +24,15 @@ export function buildReadingSaveItems(rows) {
     })
 }
 
-export function applyReadingSaveResult(rows, result) {
+export function applyReadingSaveResult(rows, result, submittedSnapshots) {
   const successfulMeters = new Set((result?.details || [])
     .filter(detail => detail.status === 'success' || detail.status === 'abnormal')
     .map(detail => detail.waterMeterId))
 
   rows.forEach(row => {
-    if (successfulMeters.has(row.waterMeterId)) {
-      row.originalSnapshot = createEditableSnapshot(row)
+    const submittedSnapshot = submittedSnapshots?.get(row.waterMeterId)
+    if (successfulMeters.has(row.waterMeterId) && submittedSnapshot) {
+      row.originalSnapshot = submittedSnapshot
     }
   })
 }
